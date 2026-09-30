@@ -232,6 +232,39 @@ class RecommendationLog(Base):
     recorded_at: Mapped[dt.datetime] = mapped_column(DateTime, index=True)
 
 
+class PriceAlert(Base):
+    """One row per watchlisted symbol with a user-set price threshold --
+    unlike RecommendationLog (an append-only history), this is a single
+    mutable row per symbol: upper_price/lower_price are the CURRENT
+    target(s), set from the Watchlist page (see
+    dashboard/views/watchlist.py) and checked every ~15 minutes by
+    scripts/check_price_alerts.py via Finnhub's /quote endpoint (see
+    ingest/quote.py) -- deliberately NOT part of the daily
+    refresh_live_data.py run, since "near real time" needs a much tighter
+    cadence than once/day.
+
+    above_triggered/below_triggered record whether the MOST RECENT check
+    already fired a webhook alert for that side, so a price that STAYS
+    above upper_price doesn't re-alert every 5-15 minutes -- only the
+    crossing itself does (see
+    storage/repository.py::set_alert_triggered_state). Both flags reset to
+    False whenever the user changes upper_price/lower_price (see
+    storage/repository.py::set_alert_threshold) -- a new target should
+    start "unwatched," not immediately treated as already-crossed.
+    """
+
+    __tablename__ = "price_alerts"
+    __table_args__ = (UniqueConstraint("symbol_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    symbol_id: Mapped[int] = mapped_column(ForeignKey("symbols.id"), index=True)
+    upper_price: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
+    lower_price: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
+    above_triggered: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    below_triggered: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    updated_at: Mapped[dt.datetime] = mapped_column(DateTime)
+
+
 class ReturnModelParams(Base):
     """Persisted per-symbol return-distribution fit -- the direct analog of
     soccer-predictor's FittedParams, just one row per SYMBOL instead of one
