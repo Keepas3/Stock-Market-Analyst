@@ -29,7 +29,7 @@ def render() -> None:
 
     if df.empty:
         st.info(
-            'Your Watchlist is empty. Select a company on the Main page and click "Add to '
+            'Your Watchlist is empty. Select a company on the Companies page and click "Add to '
             'Watchlist" to add it here.'
         )
         return
