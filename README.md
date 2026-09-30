@@ -1,56 +1,20 @@
 # Stock Predictor
 
-A stock price/sentiment predictor, ported from the architecture of
-[soccer-predictor](../soccer-predictor) -- a companion project that
-predicts football match outcomes from historical results + current-season
-player stats. This project applies the same shape to equities: historical
-daily prices (weighted toward recent data) plus recent news sentiment
-("reputation") as a small, capped nudge on top.
+A Streamlit dashboard that tracks ~50 stocks, combining daily price
+history with news/social sentiment and fundamentals to produce a
+5-trading-day forward prediction and a Buy/Hold/Sell recommendation for
+each one.
 
-## Phase 1 (current scope)
+## Features
 
-- Historical daily OHLCV prices from Yahoo Finance's public chart endpoint
-  (free, keyless).
-- News sentiment from Finnhub's `company-news` endpoint + local VADER
-  scoring (free, 60 requests/minute, no daily cap -- see
-  `ingest/sentiment.py`), which is what let the watchlist grow to ~50
-  curated symbols (see `config/watchlist.yaml`) after outgrowing Alpha
-  Vantage's old 25-requests/day `NEWS_SENTIMENT` cap.
-- Fundamentals (P/E ratio, company profile) primarily from Finnhub's free
-  tier too, with Alpha Vantage's `OVERVIEW` kept as a fallback and as the
-  source of the company description/address (see
-  `ingest/fundamentals.py`). Quarterly financials (revenue/net income/EPS)
-  still come from Alpha Vantage (see `ingest/financials.py`).
-- A per-symbol return-distribution fit (time-decay-weighted mean/
-  volatility, Student-t tails) -- the Dixon-Coles analog, just simpler:
-  each symbol is fit independently, no cross-symbol interaction.
-- A 5-trading-day forward prediction: P(up)/P(flat)/P(down) + an expected
-  return range.
-- A Streamlit dashboard with a left-hand nav: a Main page browsing every
-  tracked symbol with a button to add/remove it from your personal
-  Watchlist, a Watchlist page showing only the ones you've added, and a
-  per-symbol detail page with a price chart, sentiment reading, and the
-  full prediction breakdown.
-- Per-symbol price alerts: from the Watchlist page, set an upper and/or
-  lower price threshold on any watchlisted symbol; a separate, lightweight
-  GitHub Actions job (`.github/workflows/check-price-alerts.yml`, every
-  ~15 min during US market hours) polls Finnhub's `/quote` endpoint for
-  symbols with a threshold set and posts a Discord/Slack webhook alert the
-  moment price crosses it (best-effort near-real-time, not a live feed --
-  GitHub Actions cron has a ~5 minute floor). An alert fires only once per
-  crossing, not on every check, and requires BOTH the symbol to be
-  Watchlisted AND a threshold to be set -- removing either stops alerts
-  for that symbol.
-- An optional owner-password gate (`OWNER_PASSWORD`, see below) on the two
-  write actions (Add/Remove Watchlist, Save price alert) -- meant for
-  running this publicly (e.g. linked from a portfolio site) without a
-  stranger being able to edit your watchlist or spam your webhook.
-  Read-only browsing is never gated. Unset locally by default.
-
-Deliberately out of scope for Phase 1: prediction-accuracy tracking, a
-live intraday price banner, an admin panel, and cloud deployment -- see
-the project plan for the reasoning (soccer-predictor itself was built
-incrementally, not all at once).
+- Browse every tracked stock and build a personal Watchlist
+- Price chart, fundamentals (P/E), quarterly financials, and news/social
+  sentiment for each symbol
+- Price alerts: set an upper and/or lower price threshold on a watchlisted
+  stock and get a Discord/Slack notification when it's crossed (checked
+  every ~15 minutes during market hours)
+- Optional password protection on Watchlist/alert changes, for running
+  this publicly without letting visitors edit your data
 
 ## Setup
 
@@ -66,31 +30,22 @@ To check price alerts locally: `uv run python scripts/check_price_alerts.py`.
 
 ## GitHub Actions secrets
 
-Both scheduled workflows (`.github/workflows/refresh-data.yml`,
-`.github/workflows/check-price-alerts.yml`) read these from the repo's
-Settings -> Secrets and variables -> Actions:
+Two scheduled workflows keep data and price alerts up to date
+(`.github/workflows/refresh-data.yml`, `.github/workflows/check-price-alerts.yml`).
+Add these as repo secrets (Settings -> Secrets and variables -> Actions):
 
-- `ALPHA_VANTAGE_API_KEY` -- used by `refresh-data.yml` only.
-- `FINNHUB_API_KEY` -- used by both workflows.
-- `DISCORD_WEBHOOK_URL` -- used by both workflows; required for the
-  price-alert feature above, and also for `refresh-data.yml`'s existing
-  recommendation-change alert to actually fire on the scheduled run.
+- `ALPHA_VANTAGE_API_KEY`
+- `FINNHUB_API_KEY`
+- `DISCORD_WEBHOOK_URL` -- needed for both the recommendation-change and
+  price-threshold alerts to actually fire
 
-## Deploying publicly (e.g. Streamlit Community Cloud)
+## Deploying publicly
 
-This app has no user accounts -- `data/stocks.db` is one shared database,
-so without `OWNER_PASSWORD` set, anyone who reaches the deployed URL can
-edit the watchlist or price alerts (viewing is always open to everyone).
-Before sharing a public link:
-
-1. Set `OWNER_PASSWORD` to a real password -- as an app secret on
-   Streamlit Community Cloud (Settings -> Secrets, same flat
-   `KEY = "value"` TOML format as the other keys; root-level entries are
-   automatically available via `os.environ`, no code change needed), or
-   in `.env` for local runs.
-2. Clicking Add/Remove Watchlist or Save price alert then prompts for
-   that password (once per browser session) before the change is applied;
-   without it, nothing changes.
+There are no user accounts -- the database is shared, so without
+`OWNER_PASSWORD` set, anyone with the URL can edit the Watchlist or price
+alerts (viewing is always open to everyone). Set `OWNER_PASSWORD` as an
+app secret before sharing a public link; Watchlist/alert changes will
+then prompt for it once per browser session.
 
 ## Tests
 
