@@ -16,7 +16,7 @@ from stock_predictor.storage.repository import set_watchlisted
 
 
 def render() -> None:
-    st.title("🏠 Main")
+    st.title("Main")
 
     with session_scope() as session:
         df = watchlist_dataframe(session)
@@ -53,7 +53,7 @@ def render() -> None:
         is_watchlisted = bool(selected["Watchlist"])
         col1, col2 = st.columns(2)
         with col1:
-            label = "✓ Remove from Watchlist" if is_watchlisted else "☆ Add to Watchlist"
+            label = "Remove from Watchlist" if is_watchlisted else "Add to Watchlist"
             if st.button(label, key=f"toggle_{symbol_id}"):
                 with session_scope() as session:
                     set_watchlisted(session, symbol_id, not is_watchlisted)

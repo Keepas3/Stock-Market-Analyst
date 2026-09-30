@@ -46,7 +46,7 @@ WATCHLIST_DISPLAY_COLUMNS = (
 # why the actual add/remove control is a button pair, not this column.
 SYMBOL_TABLE_DISPLAY_COLUMNS = WATCHLIST_DISPLAY_COLUMNS + ("Watchlist",)
 
-_MA_SIGNAL_LABELS = {1: "🟢 Golden Cross", -1: "🔴 Death Cross", 0: "⚪ Neutral"}
+_MA_SIGNAL_LABELS = {1: "Golden Cross", -1: "Death Cross", 0: "Neutral"}
 
 # 52-week range window -- calendar days, matching how "52-week high/low" is
 # conventionally quoted (trailing year from the most recent bar), not a
