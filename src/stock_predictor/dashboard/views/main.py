@@ -10,6 +10,7 @@ from __future__ import annotations
 import streamlit as st
 
 from stock_predictor.dashboard import navigation
+from stock_predictor.dashboard.auth import require_owner
 from stock_predictor.dashboard.components import render_symbol_table, watchlist_dataframe
 from stock_predictor.storage.db import session_scope
 from stock_predictor.storage.repository import set_watchlisted
@@ -51,17 +52,22 @@ def render() -> None:
         with col1:
             label = "Remove from Watchlist" if is_watchlisted else "Add to Watchlist"
             if st.button(label, key=f"toggle_{symbol_id}"):
-                with session_scope() as session:
-                    set_watchlisted(session, symbol_id, not is_watchlisted)
-                st.rerun()
+
+                def _do_toggle(symbol_id=symbol_id, is_watchlisted=is_watchlisted) -> None:
+                    with session_scope() as session:
+                        set_watchlisted(session, symbol_id, not is_watchlisted)
+
+                if require_owner(_do_toggle):
+                    st.rerun()
         with col2:
             if st.button(f"View {selected['Ticker']} full detail →", key=f"view_{symbol_id}"):
                 st.switch_page(navigation.symbol_detail_page(), query_params={"symbol": str(symbol_id)})
 
     st.caption(
         "Click a row to reveal buttons for adding it to your personal Watchlist (see the Watchlist "
-        "page in the sidebar) or viewing its full breakdown. MA Signal/P/E/News Sentiment/Social "
-        "Sentiment/Recommendation are blank until `uv run python scripts/run_training.py` has fit "
-        "that symbol's return model at least once and `uv run python scripts/refresh_live_data.py` "
-        "has pulled its fundamentals/sentiment readings."
+        "page in the sidebar) or viewing its full breakdown -- adding/removing asks for the owner "
+        "password if one is configured (see OWNER_PASSWORD in README.md), viewing is open to anyone. "
+        "MA Signal/P/E/News Sentiment/Social Sentiment/Recommendation are blank until "
+        "`uv run python scripts/run_training.py` has fit that symbol's return model at least once "
+        "and `uv run python scripts/refresh_live_data.py` has pulled its fundamentals/sentiment readings."
     )

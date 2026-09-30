@@ -10,6 +10,7 @@ from __future__ import annotations
 import streamlit as st
 
 from stock_predictor.dashboard import navigation
+from stock_predictor.dashboard.auth import require_owner
 from stock_predictor.dashboard.components import render_symbol_table, watchlist_dataframe
 from stock_predictor.storage.db import session_scope
 from stock_predictor.storage.repository import (
@@ -56,9 +57,13 @@ def render() -> None:
         col1, col2 = st.columns(2)
         with col1:
             if st.button("Remove from Watchlist", key=f"toggle_{symbol_id}"):
-                with session_scope() as session:
-                    set_watchlisted(session, symbol_id, False)
-                st.rerun()
+
+                def _do_remove(symbol_id=symbol_id) -> None:
+                    with session_scope() as session:
+                        set_watchlisted(session, symbol_id, False)
+
+                if require_owner(_do_remove):
+                    st.rerun()
         with col2:
             if st.button(f"View {selected['Ticker']} full detail →", key=f"view_{symbol_id}"):
                 st.switch_page(navigation.symbol_detail_page(), query_params={"symbol": str(symbol_id)})
@@ -91,15 +96,21 @@ def render() -> None:
                 key=f"lower_{symbol_id}",
             )
         if st.button("Save price alert", key=f"save_alert_{symbol_id}"):
-            with session_scope() as session:
-                set_alert_threshold(session, symbol_id, upper_input, lower_input)
-            st.success("Price alert saved.")
+
+            def _do_save_alert(symbol_id=symbol_id, upper_input=upper_input, lower_input=lower_input) -> None:
+                with session_scope() as session:
+                    set_alert_threshold(session, symbol_id, upper_input, lower_input)
+
+            if require_owner(_do_save_alert):
+                st.success("Price alert saved.")
 
     st.caption(
         "Click a row to reveal buttons for removing it from your Watchlist, viewing its full "
         "breakdown, or setting a price alert (checked every ~15 minutes during market hours by a "
         "separate GitHub Actions job -- requires FINNHUB_API_KEY and DISCORD_WEBHOOK_URL, see "
-        "README.md). MA Signal/P/E/News Sentiment/Social Sentiment/Recommendation are blank until "
-        "`uv run python scripts/run_training.py` has fit that symbol's return model at least once "
-        "and `uv run python scripts/refresh_live_data.py` has pulled its fundamentals/sentiment readings."
+        "README.md). Removing/setting an alert asks for the owner password if one is configured "
+        "(see OWNER_PASSWORD in README.md), viewing is open to anyone. MA Signal/P/E/News Sentiment/"
+        "Social Sentiment/Recommendation are blank until `uv run python scripts/run_training.py` has "
+        "fit that symbol's return model at least once and `uv run python scripts/refresh_live_data.py` "
+        "has pulled its fundamentals/sentiment readings."
     )

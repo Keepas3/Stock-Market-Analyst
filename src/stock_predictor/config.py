@@ -73,3 +73,15 @@ def finnhub_api_key() -> str | None:
 
 def discord_webhook_url() -> str | None:
     return os.environ.get("DISCORD_WEBHOOK_URL") or None
+
+
+def owner_password() -> str | None:
+    """Gates write actions (Add/Remove Watchlist, Save price alert) on the
+    dashboard -- see dashboard/auth.py. This app has no real user
+    accounts, so once deployed publicly this is the only thing standing
+    between a random visitor and editing the (single, shared) watchlist or
+    price-alert thresholds. Unset (the local-dev default) means the gate
+    is skipped entirely -- every write action is allowed, same as before
+    this existed.
+    """
+    return os.environ.get("OWNER_PASSWORD") or None
