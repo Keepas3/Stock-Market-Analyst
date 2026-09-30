@@ -21,7 +21,6 @@ from stock_predictor.storage.repository import (
     latest_sentiment,
     latest_social_sentiment,
     price_bars_for_symbol,
-    set_watchlisted,
 )
 
 WATCHLIST_DISPLAY_COLUMNS = (
@@ -41,10 +40,11 @@ WATCHLIST_DISPLAY_COLUMNS = (
     "Recommendation",
 )
 
-# Main/browse page adds the editable Watchlist checkbox; Watchlist page
-# shows the same table (already filtered to is_watchlisted=True) plus the
-# same checkbox so a symbol can be removed from either page.
-EDITABLE_DISPLAY_COLUMNS = WATCHLIST_DISPLAY_COLUMNS + ("Watchlist",)
+# Main/browse page adds a read-only Watchlist indicator column; Watchlist
+# page shows the same table (already filtered to is_watchlisted=True) with
+# the same column, always checked. See render_symbol_table's docstring for
+# why the actual add/remove control is a button pair, not this column.
+SYMBOL_TABLE_DISPLAY_COLUMNS = WATCHLIST_DISPLAY_COLUMNS + ("Watchlist",)
 
 _MA_SIGNAL_LABELS = {1: "🟢 Golden Cross", -1: "🔴 Death Cross", 0: "⚪ Neutral"}
 
@@ -110,12 +110,12 @@ def market_snapshot(price_df: pd.DataFrame) -> dict:
 def watchlist_dataframe(session: Session, symbols: list[Symbol] | None = None) -> pd.DataFrame:
     """One row per symbol in `symbols` (all tracked symbols if omitted) --
     the direct analog of soccer-predictor's leaderboard_dataframe. Includes
-    a `symbol_id` column for row-click navigation (pass
+    a `symbol_id` column for row-click selection (pass
     `column_order=WATCHLIST_DISPLAY_COLUMNS` to hide it, or
-    `EDITABLE_DISPLAY_COLUMNS` to also show the "Watchlist" checkbox
-    column) and a "Watchlist" column mirroring `Symbol.is_watchlisted` for
-    dashboard/views/main.py's and dashboard/views/watchlist.py's shared
-    add/remove checkbox.
+    `SYMBOL_TABLE_DISPLAY_COLUMNS` to also show the "Watchlist" indicator
+    column) and a "Watchlist" column mirroring `Symbol.is_watchlisted` --
+    see render_symbol_table and dashboard/views/main.py's/watchlist.py's
+    add/remove buttons.
 
     "Recommendation" (Buy/Hold/Sell) is prediction.composite.recommendation
     (see model/technical_score.py) -- an equal-weighted vote across the MA
@@ -150,7 +150,7 @@ def watchlist_dataframe(session: Session, symbols: list[Symbol] | None = None) -
     return pd.DataFrame(rows)
 
 
-_EDITABLE_TABLE_COLUMN_CONFIG = {
+_SYMBOL_TABLE_COLUMN_CONFIG = {
     "Price": st.column_config.NumberColumn(format="dollar"),
     "Change": st.column_config.NumberColumn(format="dollar"),
     "% Change": st.column_config.NumberColumn(format="percent"),
@@ -163,56 +163,48 @@ _EDITABLE_TABLE_COLUMN_CONFIG = {
     "P/E": st.column_config.NumberColumn(format="%.2fx"),
     "News Sentiment": st.column_config.NumberColumn(format="%+.3f"),
     "Social Sentiment": st.column_config.NumberColumn(format="%+.3f"),
-    "Watchlist": st.column_config.CheckboxColumn(help="Add or remove this company from your personal Watchlist"),
-    "Detail": st.column_config.LinkColumn(display_text="View →"),
+    # A plain (non-editable) checkmark -- st.dataframe never lets you edit
+    # a cell, so this is purely a "already on your Watchlist?" indicator;
+    # the button pair render_symbol_table's caller shows for the selected
+    # row is the actual add/remove control (see that function's docstring
+    # for why a data_editor + inline checkbox isn't used).
+    "Watchlist": st.column_config.CheckboxColumn(help="Already on your personal Watchlist"),
 }
 
 
-def render_editable_symbol_table(df: pd.DataFrame, key: str) -> pd.DataFrame | None:
-    """The Main/Watchlist pages' shared table: every WATCHLIST_DISPLAY_COLUMNS
-    field plus an editable "Watchlist" checkbox and a "Detail" link to the
-    Symbol Detail page. Returns the edited dataframe (pass to
-    apply_watchlist_edits) or None if `df` is empty (caller should show its
-    own empty-state message instead).
+def render_symbol_table(df: pd.DataFrame, key: str) -> dict | None:
+    """The Main/Watchlist pages' shared table -- every WATCHLIST_DISPLAY_COLUMNS
+    field plus a read-only "Watchlist" indicator. Click a row to select it;
+    returns that row as a dict (None if nothing's selected, or `df` is
+    empty and the caller should show its own empty-state message instead).
 
-    st.data_editor (unlike st.dataframe) has no row-click/on_select
-    navigation in the installed Streamlit version, so a link column
-    substitutes for it -- clicking a row's ticker no longer navigates, but
-    "View ->" does, via a normal (full-page) navigation to the Symbol
-    Detail page's own URL path with a `?symbol=<id>` query param.
+    Uses st.dataframe, not st.data_editor -- the installed Streamlit
+    version's data_editor has no row-click/on_select navigation, which
+    previously meant substituting a link column for navigation, but that
+    renders as a real <a> tag that opens in a new browser tab (no way to
+    force same-tab via st.column_config.LinkColumn's public API). This
+    keeps the original click-to-select, same-tab-navigation experience;
+    the caller renders explicit "Add/Remove Watchlist" and "View detail"
+    buttons for whatever row is selected (see dashboard/views/main.py).
     """
     if df.empty:
         return None
 
-    display_df = df.copy()
-    display_df["Detail"] = "symbol?symbol=" + display_df["symbol_id"].astype(str)
-
-    return st.data_editor(
-        display_df,
+    event = st.dataframe(
+        df.style.map(color_by_sign, subset=["Change", "% Change"]),
         use_container_width=True,
         hide_index=True,
-        height=35 * (len(display_df) + 1) + 3,
-        column_order=EDITABLE_DISPLAY_COLUMNS + ("Detail",),
-        column_config=_EDITABLE_TABLE_COLUMN_CONFIG,
-        disabled=[c for c in display_df.columns if c != "Watchlist"],
+        height=35 * (len(df) + 1) + 3,
+        column_order=SYMBOL_TABLE_DISPLAY_COLUMNS,
+        column_config=_SYMBOL_TABLE_COLUMN_CONFIG,
+        on_select="rerun",
+        selection_mode="single-row",
         key=key,
     )
-
-
-def apply_watchlist_edits(session: Session, original_df: pd.DataFrame, edited_df: pd.DataFrame) -> bool:
-    """Diffs `edited_df`'s "Watchlist" column against `original_df` (same
-    row order/index, since edited_df is st.data_editor's own return value
-    for original_df) and persists any changed rows via
-    storage.repository.set_watchlisted. Returns True if anything changed,
-    so the caller knows to st.rerun() and show the DB's new state instead
-    of the editor's transient one.
-    """
-    changed_mask = edited_df["Watchlist"] != original_df["Watchlist"]
-    if not changed_mask.any():
-        return False
-    for idx in edited_df.index[changed_mask]:
-        set_watchlisted(session, int(edited_df.loc[idx, "symbol_id"]), bool(edited_df.loc[idx, "Watchlist"]))
-    return True
+    selected_rows = event.selection.rows if event and event.selection else []
+    if not selected_rows:
+        return None
+    return df.iloc[selected_rows[0]].to_dict()
 
 
 # CNN-style adjustable range presets, keyed by trading-day bar count (our
