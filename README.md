@@ -41,6 +41,11 @@ daily prices (weighted toward recent data) plus recent news sentiment
   crossing, not on every check, and requires BOTH the symbol to be
   Watchlisted AND a threshold to be set -- removing either stops alerts
   for that symbol.
+- An optional owner-password gate (`OWNER_PASSWORD`, see below) on the two
+  write actions (Add/Remove Watchlist, Save price alert) -- meant for
+  running this publicly (e.g. linked from a portfolio site) without a
+  stranger being able to edit your watchlist or spam your webhook.
+  Read-only browsing is never gated. Unset locally by default.
 
 Deliberately out of scope for Phase 1: prediction-accuracy tracking, a
 live intraday price banner, an admin panel, and cloud deployment -- see
@@ -70,6 +75,22 @@ Settings -> Secrets and variables -> Actions:
 - `DISCORD_WEBHOOK_URL` -- used by both workflows; required for the
   price-alert feature above, and also for `refresh-data.yml`'s existing
   recommendation-change alert to actually fire on the scheduled run.
+
+## Deploying publicly (e.g. Streamlit Community Cloud)
+
+This app has no user accounts -- `data/stocks.db` is one shared database,
+so without `OWNER_PASSWORD` set, anyone who reaches the deployed URL can
+edit the watchlist or price alerts (viewing is always open to everyone).
+Before sharing a public link:
+
+1. Set `OWNER_PASSWORD` to a real password -- as an app secret on
+   Streamlit Community Cloud (Settings -> Secrets, same flat
+   `KEY = "value"` TOML format as the other keys; root-level entries are
+   automatically available via `os.environ`, no code change needed), or
+   in `.env` for local runs.
+2. Clicking Add/Remove Watchlist or Save price alert then prompts for
+   that password (once per browser session) before the change is applied;
+   without it, nothing changes.
 
 ## Tests
 
