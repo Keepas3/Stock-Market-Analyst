@@ -26,9 +26,11 @@ daily prices (weighted toward recent data) plus recent news sentiment
   each symbol is fit independently, no cross-symbol interaction.
 - A 5-trading-day forward prediction: P(up)/P(flat)/P(down) + an expected
   return range.
-- A Streamlit dashboard: a watchlist table and a per-symbol detail page
-  with a price chart, sentiment reading, and the full prediction
-  breakdown.
+- A Streamlit dashboard with a left-hand nav: a Main page browsing every
+  tracked symbol with a checkbox to add/remove it from your personal
+  Watchlist, a Watchlist page showing only the ones you've checked, and a
+  per-symbol detail page with a price chart, sentiment reading, and the
+  full prediction breakdown.
 
 Deliberately out of scope for Phase 1: prediction-accuracy tracking, a
 live intraday price banner, an admin panel, and cloud deployment -- see

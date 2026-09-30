@@ -28,8 +28,10 @@ from stock_predictor.storage.repository import (
     replace_recent_articles,
     replace_sentiment_snapshot,
     replace_social_sentiment_snapshot,
+    set_watchlisted,
     symbol_by_ticker,
     upsert_price_bar,
+    watchlisted_symbols,
 )
 
 
@@ -46,6 +48,28 @@ def test_get_or_create_symbol_is_idempotent(session):
     second = get_or_create_symbol(session, "AAPL", "Apple Inc.", "Technology")
     assert first.id == second.id
     assert len(all_symbols(session)) == 1
+
+
+def test_new_symbol_is_not_watchlisted_by_default(session):
+    symbol = get_or_create_symbol(session, "AAPL", "Apple Inc.")
+    assert symbol.is_watchlisted is False
+    assert watchlisted_symbols(session) == []
+
+
+def test_set_watchlisted_adds_and_removes(session):
+    symbol = get_or_create_symbol(session, "AAPL", "Apple Inc.")
+    get_or_create_symbol(session, "MSFT", "Microsoft Corporation")
+
+    set_watchlisted(session, symbol.id, True)
+    assert [s.ticker for s in watchlisted_symbols(session)] == ["AAPL"]
+
+    set_watchlisted(session, symbol.id, False)
+    assert watchlisted_symbols(session) == []
+
+
+def test_set_watchlisted_on_unknown_symbol_id_is_a_no_op(session):
+    set_watchlisted(session, 999, True)  # doesn't raise
+    assert watchlisted_symbols(session) == []
 
 
 def test_symbol_by_ticker_returns_none_when_missing(session):

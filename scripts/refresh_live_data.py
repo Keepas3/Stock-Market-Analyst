@@ -111,11 +111,16 @@ def main() -> None:
 
         with session_scope() as session:
             existing_fundamentals = latest_fundamentals(session, symbol_id)
-        needs_pe_refresh = existing_fundamentals is None or (
-            dt.date.today() - existing_fundamentals.date
+            # Extract while the session is still open -- existing_fundamentals
+            # is a detached ORM instance once this `with` block exits, and
+            # touching its attributes afterward raises DetachedInstanceError
+            # (same reasoning as the dashboard's own detached-instance comments).
+            existing_fundamentals_date = existing_fundamentals.date if existing_fundamentals else None
+        needs_pe_refresh = existing_fundamentals_date is None or (
+            dt.date.today() - existing_fundamentals_date
         ).days >= FUNDAMENTALS_REFRESH_DAYS
         if not needs_pe_refresh:
-            age_days = (dt.date.today() - existing_fundamentals.date).days
+            age_days = (dt.date.today() - existing_fundamentals_date).days
             print(f"  fundamentals: skipped -- refreshed {age_days}d ago (weekly cadence)")
         else:
             overview = fetch_overview(ticker)
