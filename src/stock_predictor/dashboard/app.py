@@ -23,6 +23,7 @@ init_db()
 
 pg = st.navigation(
     [
+        navigation.main_page(),
         navigation.watchlist_page(),
         navigation.symbol_detail_page(),
     ]

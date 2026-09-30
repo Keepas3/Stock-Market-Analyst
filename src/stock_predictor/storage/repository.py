@@ -47,6 +47,21 @@ def all_symbols(session: Session) -> list[Symbol]:
     return list(session.scalars(select(Symbol).order_by(Symbol.ticker)).all())
 
 
+def watchlisted_symbols(session: Session) -> list[Symbol]:
+    return list(session.scalars(select(Symbol).where(Symbol.is_watchlisted).order_by(Symbol.ticker)).all())
+
+
+def set_watchlisted(session: Session, symbol_id: int, value: bool) -> None:
+    """Flips the Main page's per-row "Add to Watchlist" checkbox (see
+    dashboard/views/main.py) -- a no-op if `symbol_id` doesn't exist
+    (shouldn't happen from the UI, but this stays a plain write rather than
+    raising, same degrade-quietly spirit as the rest of this app).
+    """
+    symbol = session.get(Symbol, symbol_id)
+    if symbol is not None:
+        symbol.is_watchlisted = value
+
+
 def upsert_price_bar(
     session: Session,
     symbol_id: int,

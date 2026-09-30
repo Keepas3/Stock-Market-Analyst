@@ -14,12 +14,14 @@ from sqlalchemy.orm import Session
 from stock_predictor.model.sentiment_adjustment import SENTIMENT_IMPACT_CAP
 from stock_predictor.model.technical_score import BUY_VOTE_THRESHOLD, CompositeSignal, SELL_VOTE_THRESHOLD
 from stock_predictor.prediction.service import predict_symbol
+from stock_predictor.storage.models import Symbol
 from stock_predictor.storage.repository import (
     all_symbols,
     latest_fundamentals,
     latest_sentiment,
     latest_social_sentiment,
     price_bars_for_symbol,
+    set_watchlisted,
 )
 
 WATCHLIST_DISPLAY_COLUMNS = (
@@ -38,6 +40,11 @@ WATCHLIST_DISPLAY_COLUMNS = (
     "Social Sentiment",
     "Recommendation",
 )
+
+# Main/browse page adds the editable Watchlist checkbox; Watchlist page
+# shows the same table (already filtered to is_watchlisted=True) plus the
+# same checkbox so a symbol can be removed from either page.
+EDITABLE_DISPLAY_COLUMNS = WATCHLIST_DISPLAY_COLUMNS + ("Watchlist",)
 
 _MA_SIGNAL_LABELS = {1: "🟢 Golden Cross", -1: "🔴 Death Cross", 0: "⚪ Neutral"}
 
@@ -100,10 +107,15 @@ def market_snapshot(price_df: pd.DataFrame) -> dict:
     }
 
 
-def watchlist_dataframe(session: Session) -> pd.DataFrame:
-    """One row per watched symbol -- the direct analog of soccer-predictor's
-    leaderboard_dataframe. Includes a `symbol_id` column for row-click
-    navigation (pass `column_order=WATCHLIST_DISPLAY_COLUMNS` to hide it).
+def watchlist_dataframe(session: Session, symbols: list[Symbol] | None = None) -> pd.DataFrame:
+    """One row per symbol in `symbols` (all tracked symbols if omitted) --
+    the direct analog of soccer-predictor's leaderboard_dataframe. Includes
+    a `symbol_id` column for row-click navigation (pass
+    `column_order=WATCHLIST_DISPLAY_COLUMNS` to hide it, or
+    `EDITABLE_DISPLAY_COLUMNS` to also show the "Watchlist" checkbox
+    column) and a "Watchlist" column mirroring `Symbol.is_watchlisted` for
+    dashboard/views/main.py's and dashboard/views/watchlist.py's shared
+    add/remove checkbox.
 
     "Recommendation" (Buy/Hold/Sell) is prediction.composite.recommendation
     (see model/technical_score.py) -- an equal-weighted vote across the MA
@@ -113,7 +125,7 @@ def watchlist_dataframe(session: Session) -> pd.DataFrame:
     just in code.
     """
     rows = []
-    for symbol in all_symbols(session):
+    for symbol in symbols if symbols is not None else all_symbols(session):
         prediction = predict_symbol(session, symbol.id)
         composite = prediction.composite if prediction else None
         fundamentals = latest_fundamentals(session, symbol.id)
@@ -132,9 +144,75 @@ def watchlist_dataframe(session: Session) -> pd.DataFrame:
                 "News Sentiment": sentiment_row.overall_sentiment_score if sentiment_row else None,
                 "Social Sentiment": social.overall_sentiment_score if social else None,
                 "Recommendation": composite.recommendation if composite else None,
+                "Watchlist": symbol.is_watchlisted,
             }
         )
     return pd.DataFrame(rows)
+
+
+_EDITABLE_TABLE_COLUMN_CONFIG = {
+    "Price": st.column_config.NumberColumn(format="dollar"),
+    "Change": st.column_config.NumberColumn(format="dollar"),
+    "% Change": st.column_config.NumberColumn(format="percent"),
+    "Volume": st.column_config.NumberColumn(format="compact"),
+    "52W Low": st.column_config.NumberColumn(format="dollar"),
+    "52W High": st.column_config.NumberColumn(format="dollar"),
+    # Unformatted, this rendered raw floats to 6 decimal places
+    # (e.g. "39.080000") -- same %.2fx style as the Competitors table's own
+    # P/E column.
+    "P/E": st.column_config.NumberColumn(format="%.2fx"),
+    "News Sentiment": st.column_config.NumberColumn(format="%+.3f"),
+    "Social Sentiment": st.column_config.NumberColumn(format="%+.3f"),
+    "Watchlist": st.column_config.CheckboxColumn(help="Add or remove this company from your personal Watchlist"),
+    "Detail": st.column_config.LinkColumn(display_text="View →"),
+}
+
+
+def render_editable_symbol_table(df: pd.DataFrame, key: str) -> pd.DataFrame | None:
+    """The Main/Watchlist pages' shared table: every WATCHLIST_DISPLAY_COLUMNS
+    field plus an editable "Watchlist" checkbox and a "Detail" link to the
+    Symbol Detail page. Returns the edited dataframe (pass to
+    apply_watchlist_edits) or None if `df` is empty (caller should show its
+    own empty-state message instead).
+
+    st.data_editor (unlike st.dataframe) has no row-click/on_select
+    navigation in the installed Streamlit version, so a link column
+    substitutes for it -- clicking a row's ticker no longer navigates, but
+    "View ->" does, via a normal (full-page) navigation to the Symbol
+    Detail page's own URL path with a `?symbol=<id>` query param.
+    """
+    if df.empty:
+        return None
+
+    display_df = df.copy()
+    display_df["Detail"] = "symbol?symbol=" + display_df["symbol_id"].astype(str)
+
+    return st.data_editor(
+        display_df,
+        use_container_width=True,
+        hide_index=True,
+        height=35 * (len(display_df) + 1) + 3,
+        column_order=EDITABLE_DISPLAY_COLUMNS + ("Detail",),
+        column_config=_EDITABLE_TABLE_COLUMN_CONFIG,
+        disabled=[c for c in display_df.columns if c != "Watchlist"],
+        key=key,
+    )
+
+
+def apply_watchlist_edits(session: Session, original_df: pd.DataFrame, edited_df: pd.DataFrame) -> bool:
+    """Diffs `edited_df`'s "Watchlist" column against `original_df` (same
+    row order/index, since edited_df is st.data_editor's own return value
+    for original_df) and persists any changed rows via
+    storage.repository.set_watchlisted. Returns True if anything changed,
+    so the caller knows to st.rerun() and show the DB's new state instead
+    of the editor's transient one.
+    """
+    changed_mask = edited_df["Watchlist"] != original_df["Watchlist"]
+    if not changed_mask.any():
+        return False
+    for idx in edited_df.index[changed_mask]:
+        set_watchlisted(session, int(edited_df.loc[idx, "symbol_id"]), bool(edited_df.loc[idx, "Watchlist"]))
+    return True
 
 
 # CNN-style adjustable range presets, keyed by trading-day bar count (our

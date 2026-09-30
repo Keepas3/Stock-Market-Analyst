@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, String, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -20,6 +20,13 @@ class Symbol(Base):
     """One tracked ticker -- the direct analog of soccer-predictor's Team.
     Unlike Team, no alias table is needed: a ticker is already a clean,
     stable, universal key with no name-matching problem to solve.
+
+    `is_watchlisted` is a personal, UI-managed flag (Main page's "Add to
+    Watchlist" checkbox, see dashboard/views/main.py) -- separate from
+    being tracked at all (a row existing here, refreshed by
+    scripts/refresh_live_data.py off config/watchlist.yaml). Every tracked
+    symbol shows up on the Main/browse page regardless of this flag; the
+    Watchlist page shows only the ones flagged True.
     """
 
     __tablename__ = "symbols"
@@ -28,6 +35,7 @@ class Symbol(Base):
     ticker: Mapped[str] = mapped_column(String, unique=True, index=True)
     name: Mapped[str] = mapped_column(String)
     sector: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+    is_watchlisted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
 
 
 class PriceBar(Base):
