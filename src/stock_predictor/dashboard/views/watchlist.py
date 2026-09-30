@@ -106,11 +106,8 @@ def render() -> None:
 
     st.caption(
         "Click a row to reveal buttons for removing it from your Watchlist, viewing its full "
-        "breakdown, or setting a price alert (checked every ~15 minutes during market hours by a "
-        "separate GitHub Actions job -- requires FINNHUB_API_KEY and DISCORD_WEBHOOK_URL, see "
-        "README.md). Removing/setting an alert asks for the owner password if one is configured "
-        "(see OWNER_PASSWORD in README.md), viewing is open to anyone. MA Signal/P/E/News Sentiment/"
-        "Social Sentiment/Recommendation are blank until `uv run python scripts/run_training.py` has "
-        "fit that symbol's return model at least once and `uv run python scripts/refresh_live_data.py` "
-        "has pulled its fundamentals/sentiment readings."
+        "breakdown, or setting a price alert (checked every ~15 minutes during market hours). "
+        "Removing/setting an alert may ask for a password; viewing is open to everyone. "
+        "MA Signal/P/E/News Sentiment/Social Sentiment/Recommendation show as blank for a symbol "
+        "until enough data has been collected for it."
     )

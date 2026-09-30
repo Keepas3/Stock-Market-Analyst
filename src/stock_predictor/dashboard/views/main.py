@@ -23,7 +23,7 @@ def render() -> None:
         df = watchlist_dataframe(session)
 
     if df.empty:
-        st.warning("No symbols loaded yet. Run `uv run python scripts/fetch_historical_data.py` first.")
+        st.warning("No symbols loaded yet. Please check back soon.")
         st.stop()
 
     search_query = st.text_input("Search symbol", placeholder="e.g. AAPL", key="main_search")
@@ -65,9 +65,7 @@ def render() -> None:
 
     st.caption(
         "Click a row to reveal buttons for adding it to your personal Watchlist (see the Watchlist "
-        "page in the sidebar) or viewing its full breakdown -- adding/removing asks for the owner "
-        "password if one is configured (see OWNER_PASSWORD in README.md), viewing is open to anyone. "
-        "MA Signal/P/E/News Sentiment/Social Sentiment/Recommendation are blank until "
-        "`uv run python scripts/run_training.py` has fit that symbol's return model at least once "
-        "and `uv run python scripts/refresh_live_data.py` has pulled its fundamentals/sentiment readings."
+        "page in the sidebar) or viewing its full breakdown. Adding/removing may ask for a password; "
+        "viewing is open to everyone. MA Signal/P/E/News Sentiment/Social Sentiment/Recommendation "
+        "show as blank for a symbol until enough data has been collected for it."
     )
