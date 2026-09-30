@@ -42,10 +42,33 @@ def test_price_chart_1m_shows_last_21_bars():
     assert len(fig.data[0].x) == PRICE_CHART_RANGES["1M"]
 
 
-def test_price_chart_1d_shows_a_single_point():
-    df = _price_df(50)
-    fig = price_chart(df, "AAPL", "1D")
+def test_price_chart_has_no_1d_range():
+    """See PRICE_CHART_RANGES's own comment -- this app is daily-bars-only,
+    so a "1 day" range would always be exactly one point, and Plotly's
+    default datetime axis auto-range renders that badly (confirmed live: a
+    sub-millisecond-wide x-axis with fractional-second tick labels).
+    """
+    assert "1D" not in PRICE_CHART_RANGES
+
+
+def test_price_chart_single_point_sets_an_explicit_axis_range():
+    """A single-bar window (e.g. a freshly-added symbol with only one
+    day of history so far, on any range) must not hit the same Plotly
+    single-point auto-range bug "1D" used to.
+    """
+    df = _price_df(1)
+    fig = price_chart(df, "AAPL", "All")
+
     assert len(fig.data[0].x) == 1
+    assert fig.layout.xaxis.range is not None
+    start, end = fig.layout.xaxis.range
+    assert start < end
+
+
+def test_price_chart_multi_point_leaves_axis_range_on_auto():
+    df = _price_df(5)
+    fig = price_chart(df, "AAPL", "5D")
+    assert fig.layout.xaxis.range is None
 
 
 def test_price_chart_range_narrower_than_history_still_works():

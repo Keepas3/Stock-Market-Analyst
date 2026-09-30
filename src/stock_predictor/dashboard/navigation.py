@@ -10,11 +10,11 @@ from stock_predictor.dashboard.views import main, symbol_detail, watchlist
 
 
 def main_page() -> st.Page:
-    return st.Page(main.render, title="Main", icon="🏠", url_path="", default=True)
+    return st.Page(main.render, title="Main", icon=":material/home:", url_path="", default=True)
 
 
 def watchlist_page() -> st.Page:
-    return st.Page(watchlist.render, title="Watchlist", icon="📈", url_path="watchlist")
+    return st.Page(watchlist.render, title="Watchlist", icon=":material/star:", url_path="watchlist")
 
 
 def symbol_detail_page() -> st.Page:
@@ -22,5 +22,9 @@ def symbol_detail_page() -> st.Page:
     # a symbol's row on the Watchlist page, same "hidden, not gone" pattern
     # as soccer-predictor's team_detail_page().
     return st.Page(
-        symbol_detail.render, title="Symbol Detail", icon="🔎", url_path="symbol", visibility="hidden"
+        symbol_detail.render,
+        title="Symbol Detail",
+        icon=":material/search:",
+        url_path="symbol",
+        visibility="hidden",
     )
