@@ -7,13 +7,14 @@ built this round; flagged here and in the dashboard rather than silently
 dropped, so the gap is a documented decision, not an oversight.
 
 Both endpoints share ingest/alpha_vantage_client.py's disk cache + daily
-rate limiter with ingest/sentiment.py's NEWS_SENTIMENT and
-ingest/fundamentals.py's OVERVIEW calls (same account, same
-25-requests/day budget). Refreshed MONTHLY by scripts/refresh_live_data.py
--- real companies report quarterly (~every 90 days), so even a 30-day
-cadence catches a new quarter promptly; 16 watchlist symbols x 2 endpoints
-/ 30 days ~= 1.1 calls/day extra on top of the existing ~18.3/day
-(NEWS_SENTIMENT + OVERVIEW), comfortably under the shared cap.
+rate limiter with ingest/fundamentals.py's OVERVIEW fallback calls (same
+account, same 25-requests/day budget -- news sentiment no longer draws
+from it at all, see ingest/sentiment.py). Refreshed MONTHLY by
+scripts/refresh_live_data.py -- real companies report quarterly (~every 90
+days), so even a 30-day cadence catches a new quarter promptly; ~50
+watchlist symbols x 2 endpoints / 30 days ~= 3.3 calls/day extra on top of
+OVERVIEW's own ~7/day (weekly, ~50 symbols), comfortably under the shared
+cap.
 
 Confirmed live (2026-09, via Alpha Vantage's public `demo` key against
 IBM, since this app's own key's daily quota was exhausted at the time):

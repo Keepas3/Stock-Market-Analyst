@@ -86,6 +86,44 @@ def test_get_different_paths_or_params_do_not_share_a_cache_entry(tmp_path, monk
     assert msft == {"symbol": "MSFT"}
 
 
+def test_get_does_not_cache_an_empty_list_response(tmp_path, monkeypatch):
+    """company-news returns a bare list, not a dict -- an empty one must be
+    treated as non-data too, same as an empty dict from profile2/metric.
+    """
+    monkeypatch.setattr(finnhub_client, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(finnhub_client, "finnhub_api_key", lambda: "fake-key")
+    calls = []
+
+    def fake_get(*a, **k):
+        calls.append(1)
+        return FakeResponse([])
+
+    monkeypatch.setattr(finnhub_client.requests, "get", fake_get)
+
+    first = finnhub_client.get("company-news", {"symbol": "NOPE"}, 3600)
+    second = finnhub_client.get("company-news", {"symbol": "NOPE"}, 3600)
+
+    assert first == second == []
+    assert len(calls) == 2  # NOT served from cache on the second call
+
+
+def test_get_caches_a_genuine_list_response(tmp_path, monkeypatch):
+    monkeypatch.setattr(finnhub_client, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(finnhub_client, "finnhub_api_key", lambda: "fake-key")
+    calls = []
+
+    def fake_get(*a, **k):
+        calls.append(1)
+        return FakeResponse([{"headline": "Real article"}])
+
+    monkeypatch.setattr(finnhub_client.requests, "get", fake_get)
+
+    finnhub_client.get("company-news", {"symbol": "AAPL"}, 3600)
+    finnhub_client.get("company-news", {"symbol": "AAPL"}, 3600)
+
+    assert len(calls) == 1  # second call served from disk cache
+
+
 def test_get_does_not_cache_an_empty_dict_response(tmp_path, monkeypatch):
     monkeypatch.setattr(finnhub_client, "CACHE_DIR", tmp_path)
     monkeypatch.setattr(finnhub_client, "finnhub_api_key", lambda: "fake-key")

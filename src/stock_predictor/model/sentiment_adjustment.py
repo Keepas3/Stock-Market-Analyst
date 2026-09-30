@@ -25,8 +25,8 @@ SENTIMENT_IMPACT_CAP = 0.001
 
 
 def adjust_for_sentiment(base_mean_return: float, sentiment_score: float | None) -> float:
-    """`sentiment_score` is Alpha Vantage's own roughly -1 (bearish) to +1
-    (bullish) scale (see ingest/sentiment.py::SentimentResult). None (no
+    """`sentiment_score` is VADER's compound score, -1 (bearish) to +1
+    (bullish) (see ingest/sentiment.py::SentimentResult). None (no
     reading available) leaves `base_mean_return` untouched.
     """
     if sentiment_score is None:

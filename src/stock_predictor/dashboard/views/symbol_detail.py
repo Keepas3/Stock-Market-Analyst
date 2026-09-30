@@ -120,8 +120,7 @@ def render() -> None:
     if fundamentals is None:
         st.caption(
             "No P/E reading on record yet. Run `uv run python scripts/refresh_live_data.py` -- "
-            "refreshed weekly, not daily, to share Alpha Vantage's 25 requests/day budget with "
-            "news sentiment."
+            "refreshed weekly, not daily, since P/E doesn't move day to day."
         )
     else:
         pe_display = f"{fundamentals['pe_ratio']:.2f}" if fundamentals["pe_ratio"] is not None else "n/a"
@@ -151,8 +150,8 @@ def render() -> None:
     if not financial_quarters:
         st.caption(
             "No quarterly financials on record yet. Run `uv run python scripts/refresh_live_data.py` -- "
-            "refreshed monthly, sharing Alpha Vantage's 25 requests/day budget with news sentiment "
-            "and the P/E fetch above."
+            "refreshed monthly, sharing Alpha Vantage's 25 requests/day budget with the P/E fallback "
+            "fetch above."
         )
     else:
         render_financials_section(financial_quarters, ticker)
@@ -213,8 +212,7 @@ def render() -> None:
             )
     if sentiment is None:
         st.caption(
-            "No sentiment reading on record. Run `uv run python scripts/refresh_live_data.py` to "
-            "pull today's (subject to Alpha Vantage's 25 requests/day free-tier cap)."
+            "No sentiment reading on record. Run `uv run python scripts/refresh_live_data.py` to pull today's."
         )
     else:
         st.write(

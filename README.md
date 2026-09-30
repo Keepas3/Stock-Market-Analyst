@@ -11,13 +11,16 @@ daily prices (weighted toward recent data) plus recent news sentiment
 
 - Historical daily OHLCV prices from Yahoo Finance's public chart endpoint
   (free, keyless).
-- News sentiment from Alpha Vantage's `NEWS_SENTIMENT` endpoint (free,
-  25 requests/day -- see `config/watchlist.yaml`'s curated ~15-20 symbol
-  list, sized to fit that budget).
+- News sentiment from Finnhub's `company-news` endpoint + local VADER
+  scoring (free, 60 requests/minute, no daily cap -- see
+  `ingest/sentiment.py`), which is what let the watchlist grow to ~50
+  curated symbols (see `config/watchlist.yaml`) after outgrowing Alpha
+  Vantage's old 25-requests/day `NEWS_SENTIMENT` cap.
 - Fundamentals (P/E ratio, company profile) primarily from Finnhub's free
-  tier (60 requests/minute, no daily cap), with Alpha Vantage's `OVERVIEW`
-  kept as a fallback and as the source of the company description/address
-  (see `ingest/fundamentals.py`).
+  tier too, with Alpha Vantage's `OVERVIEW` kept as a fallback and as the
+  source of the company description/address (see
+  `ingest/fundamentals.py`). Quarterly financials (revenue/net income/EPS)
+  still come from Alpha Vantage (see `ingest/financials.py`).
 - A per-symbol return-distribution fit (time-decay-weighted mean/
   volatility, Student-t tails) -- the Dixon-Coles analog, just simpler:
   each symbol is fit independently, no cross-symbol interaction.
