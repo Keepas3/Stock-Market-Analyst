@@ -212,7 +212,18 @@ def render_symbol_table(df: pd.DataFrame, key: str) -> dict | None:
 # no real intraday "1 Day" chart; "1D" here means the single most recent
 # daily bar, shown as a point rather than a line).
 PRICE_CHART_RANGES: dict[str, int | None] = {
-    "1D": 1,
+    # No "1D" -- this app only has daily (EOD) bars (see
+    # ingest/price_history.py, interval="1d"), never intraday/by-the-minute
+    # data, so a "1 day" range would always be exactly one point. Plotly's
+    # default datetime x-axis auto-range degenerates badly for a single
+    # point (it zooms to a sub-millisecond-wide range around that one
+    # timestamp and labels ticks in fractional seconds -- confirmed live,
+    # not a hypothetical). The "Last close" line already shown right below
+    # the chart covers what a single-point "1D" view would have shown
+    # anyway, so it's dropped rather than worked around. A single-point
+    # window can still happen legitimately for any range on a
+    # freshly-added symbol with only one day of history ingested so far --
+    # see the explicit xaxis.range fix below for that case.
     "5D": 5,
     "14D": 14,
     "1M": 21,  # ~1 trading month
@@ -248,6 +259,13 @@ def price_chart(price_df: pd.DataFrame, ticker: str, range_label: str = "All") -
         height=360,
         margin=dict(t=40, b=20, l=20, r=20),
     )
+    if len(windowed) == 1:
+        # See PRICE_CHART_RANGES's own comment -- a single point left to
+        # Plotly's default datetime auto-range renders a nonsense
+        # sub-millisecond-wide axis. A fixed +/-1 day window around the
+        # one real date keeps the marker centered and the axis readable.
+        only_date = pd.Timestamp(windowed["date"].iloc[0])
+        fig.update_xaxes(range=[only_date - pd.Timedelta(days=1), only_date + pd.Timedelta(days=1)])
     return fig
 
 
