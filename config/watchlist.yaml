@@ -1,9 +1,12 @@
-# One entry per tracked symbol. Kept small and curated (~15-20 tickers) --
-# not a broad index-wide universe -- because Alpha Vantage's free
-# NEWS_SENTIMENT tier is a hard 25 requests/day; one sentiment call per
-# symbol per daily refresh needs headroom under that cap. Same
-# hand-curated shape as soccer-predictor's config/leagues.yaml -- add/
-# remove a ticker here any time, no code changes needed.
+# One entry per tracked symbol. Previously kept to ~15-20 tickers because
+# Alpha Vantage's free NEWS_SENTIMENT tier was a hard 25 requests/day and
+# every symbol needed a daily sentiment call. News sentiment now comes
+# from Finnhub's company-news endpoint + local VADER scoring instead (see
+# ingest/sentiment.py) -- Finnhub's free tier is 60 requests/minute with
+# no daily cap, so the list has grown to ~50 curated large/mid-cap names
+# spanning more sectors. Still a hand-curated list, not a full index --
+# same shape as soccer-predictor's config/leagues.yaml -- add/remove a
+# ticker here any time, no code changes needed.
 #
 # `sector` is purely descriptive (shown on the dashboard), not used in any
 # calculation.
@@ -56,3 +59,108 @@ watchlist:
   - ticker: KO
     name: The Coca-Cola Company
     sector: Consumer Staples
+  - ticker: AMD
+    name: Advanced Micro Devices Inc.
+    sector: Technology
+  - ticker: INTC
+    name: Intel Corporation
+    sector: Technology
+  - ticker: ORCL
+    name: Oracle Corporation
+    sector: Technology
+  - ticker: CRM
+    name: Salesforce Inc.
+    sector: Technology
+  - ticker: ADBE
+    name: Adobe Inc.
+    sector: Technology
+  - ticker: CSCO
+    name: Cisco Systems Inc.
+    sector: Technology
+  - ticker: IBM
+    name: International Business Machines Corp.
+    sector: Technology
+  - ticker: QCOM
+    name: Qualcomm Inc.
+    sector: Technology
+  - ticker: UNH
+    name: UnitedHealth Group Inc.
+    sector: Healthcare
+  - ticker: PFE
+    name: Pfizer Inc.
+    sector: Healthcare
+  - ticker: MRK
+    name: Merck & Co. Inc.
+    sector: Healthcare
+  - ticker: ABBV
+    name: AbbVie Inc.
+    sector: Healthcare
+  - ticker: LLY
+    name: Eli Lilly and Company
+    sector: Healthcare
+  - ticker: BAC
+    name: Bank of America Corp.
+    sector: Financials
+  - ticker: MA
+    name: Mastercard Inc.
+    sector: Financials
+  - ticker: GS
+    name: The Goldman Sachs Group Inc.
+    sector: Financials
+  - ticker: WFC
+    name: Wells Fargo & Company
+    sector: Financials
+  - ticker: MCD
+    name: McDonald's Corporation
+    sector: Consumer Discretionary
+  - ticker: HD
+    name: The Home Depot Inc.
+    sector: Consumer Discretionary
+  - ticker: NKE
+    name: Nike Inc.
+    sector: Consumer Discretionary
+  - ticker: COST
+    name: Costco Wholesale Corporation
+    sector: Consumer Staples
+  - ticker: PEP
+    name: PepsiCo Inc.
+    sector: Consumer Staples
+  - ticker: CVX
+    name: Chevron Corporation
+    sector: Energy
+  - ticker: CAT
+    name: Caterpillar Inc.
+    sector: Industrials
+  - ticker: BA
+    name: The Boeing Company
+    sector: Industrials
+  - ticker: HON
+    name: Honeywell International Inc.
+    sector: Industrials
+  - ticker: GE
+    name: General Electric Company
+    sector: Industrials
+  - ticker: LIN
+    name: Linde plc
+    sector: Materials
+  - ticker: NEE
+    name: NextEra Energy Inc.
+    sector: Utilities
+  - ticker: DUK
+    name: Duke Energy Corporation
+    sector: Utilities
+  - ticker: AMT
+    name: American Tower Corporation
+    sector: Real Estate
+  - ticker: SPG
+    name: Simon Property Group Inc.
+    sector: Real Estate
+  - ticker: T
+    name: AT&T Inc.
+    sector: Communication Services
+  - ticker: VZ
+    name: Verizon Communications Inc.
+    sector: Communication Services
+  - ticker: CMCSA
+    name: Comcast Corporation
+    sector: Communication Services

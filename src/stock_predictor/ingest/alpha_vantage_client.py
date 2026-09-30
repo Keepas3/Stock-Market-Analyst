@@ -1,14 +1,17 @@
 """Shared HTTP client for every Alpha Vantage endpoint this app calls
-(NEWS_SENTIMENT via ingest/sentiment.py, OVERVIEW via ingest/fundamentals.py,
-INCOME_STATEMENT/EARNINGS via ingest/financials.py) -- one disk cache, one
-DailyRateLimiter.
+(OVERVIEW via ingest/fundamentals.py, INCOME_STATEMENT/EARNINGS via
+ingest/financials.py) -- one disk cache, one DailyRateLimiter.
 
-ingest/fundamentals.py's OVERVIEW call is no longer P/E-critical -- Finnhub
-(ingest/finnhub_client.py) is now the primary fundamentals source, with
-this module's OVERVIEW kept as a fallback and as the source of
-description/address. That leaves more of the shared 25/day budget
-effectively available to ingest/sentiment.py and ingest/financials.py,
-which remain fully dependent on this client.
+News sentiment (ingest/sentiment.py) no longer uses Alpha Vantage at all --
+it moved to Finnhub's company-news endpoint + local VADER scoring, since
+Alpha Vantage's 25/day cap made growing the watchlist past ~16-20 symbols
+impractical. ingest/fundamentals.py's OVERVIEW call is similarly no longer
+P/E-critical -- Finnhub (ingest/finnhub_client.py) is the primary
+fundamentals source, with this module's OVERVIEW kept as a fallback and as
+the source of description/address. The only things still fully dependent
+on this client are that fundamentals fallback (weekly) and
+ingest/financials.py's quarterly financials (monthly) -- both light, well
+under the 25/day cap even across ~50 watchlist symbols.
 
 **Fixes a real bug**: each endpoint previously had its OWN independent
 rate limiter/cache (ingest/sentiment.py's original DailyRateLimiter), which

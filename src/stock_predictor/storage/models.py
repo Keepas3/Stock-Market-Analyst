@@ -67,9 +67,8 @@ class SentimentSnapshot(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     symbol_id: Mapped[int] = mapped_column(ForeignKey("symbols.id"), index=True)
     date: Mapped[dt.date] = mapped_column(Date, index=True)
-    # Relevance-weighted average of ticker_sentiment_score across that
-    # day's articles mentioning this symbol -- see ingest/sentiment.py.
-    # Alpha Vantage's own scale: roughly -1 (very bearish) to +1 (very
+    # Average VADER compound score across that day's articles for this
+    # symbol -- see ingest/sentiment.py. -1 (very bearish) to +1 (very
     # bullish), same convention this app reuses in model/sentiment_adjustment.py.
     overall_sentiment_score: Mapped[float]
     article_count: Mapped[int]
@@ -122,10 +121,10 @@ class QuarterlyFinancialsSnapshot(Base):
 
 class FundamentalsSnapshot(Base):
     """Latest P/E reading AND company-profile fields for one symbol --
-    both from the same Alpha Vantage OVERVIEW call (see
-    ingest/fundamentals.py), refreshed weekly rather than daily (P/E
-    shares Alpha Vantage's account-wide 25/day budget with news sentiment
-    and doesn't move day to day anyway; the profile fields move even less).
+    primarily from Finnhub, with Alpha Vantage's OVERVIEW call as a
+    fallback/description source (see ingest/fundamentals.py), refreshed
+    weekly rather than daily (P/E doesn't move day to day anyway; the
+    profile fields move even less).
     """
 
     __tablename__ = "fundamentals_snapshots"

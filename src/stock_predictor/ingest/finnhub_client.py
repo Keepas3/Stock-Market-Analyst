@@ -1,22 +1,25 @@
 """Shared HTTP client for Finnhub's free-tier endpoints (stock/profile2 and
-stock/metric via ingest/fundamentals.py) -- the analog of
-ingest/alpha_vantage_client.py, but for a provider with a per-minute limit
-instead of a per-day one.
+stock/metric via ingest/fundamentals.py, company-news via
+ingest/sentiment.py) -- the analog of ingest/alpha_vantage_client.py, but
+for a provider with a per-minute limit instead of a per-day one.
 
 Finnhub's free tier documents a 60-requests/minute cap and no hard daily
 cap (unlike Alpha Vantage's 25/day), which is why it's used as the primary
-source for fundamentals (see ingest/fundamentals.py) -- 16 watchlist
-symbols x 2 calls (profile2 + metric) = 32 calls per full refresh run,
-comfortably under budget even without spreading them out, but this module
-paces requests anyway for the same politeness reason
-alpha_vantage_client.py does.
+source for both fundamentals and news sentiment -- ~50 watchlist symbols x
+3 calls (profile2 + metric weekly, company-news daily) is comfortably
+under budget even without spreading them out, but this module paces
+requests anyway for the same politeness reason alpha_vantage_client.py
+does.
 
-Response shape differs from Alpha Vantage's: Finnhub returns `{}` for an
-unknown symbol or a real HTTP 429 status when rate-limited, rather than a
-documented "Information"/"Note"/"Error Message" key inside a 200 response.
-Neither is cached, so a transient rate-limit collision gets a genuine
-retry next time instead of being replayed for cache_ttl_seconds -- same
-reasoning as alpha_vantage_client.py's own throttle-response handling.
+Response shape differs from Alpha Vantage's, and isn't even consistent
+across Finnhub's own endpoints: profile2/metric return a dict (`{}` for an
+unknown symbol), company-news returns a bare list (`[]` when empty), and
+either can come back as a real HTTP 429 status when rate-limited rather
+than Alpha Vantage's documented "Information"/"Note"/"Error Message" key
+inside a 200 response. None of these are cached, so a transient
+rate-limit collision or a symbol with no data gets a genuine retry next
+time instead of being replayed for cache_ttl_seconds -- same reasoning as
+alpha_vantage_client.py's own throttle-response handling.
 """
 
 from __future__ import annotations
@@ -89,10 +92,16 @@ def _pace_requests() -> None:
 
 
 def _is_non_data_response(data: object, status_code: int) -> bool:
-    return status_code == 429 or not isinstance(data, dict) or not data
+    # Most endpoints (profile2, metric) return a dict; company-news
+    # returns a bare list -- either shape is "non-data" when empty.
+    if status_code == 429:
+        return True
+    if isinstance(data, (dict, list)):
+        return len(data) == 0
+    return True
 
 
-def get(path: str, params: dict, cache_ttl_seconds: int) -> dict:
+def get(path: str, params: dict, cache_ttl_seconds: int) -> dict | list:
     """One Finnhub call, sharing this module's disk cache + rolling-window
     rate limiter + request pacing across every caller. `params` must NOT
     include `token` -- added here. Raises MissingApiKey/
