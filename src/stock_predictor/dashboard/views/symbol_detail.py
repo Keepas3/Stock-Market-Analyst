@@ -104,10 +104,7 @@ def render() -> None:
     with session_scope() as session:
         price_df = price_bars_for_symbol(session, symbol_id)
     if price_df.empty:
-        st.info(
-            "No price history loaded for this symbol yet. Run "
-            "`uv run python scripts/fetch_historical_data.py` to pull it."
-        )
+        st.info("No price history available for this symbol yet.")
     else:
         range_label = st.segmented_control(
             "Range", options=list(PRICE_CHART_RANGES.keys()), default="1M", key=f"price_range_{symbol_id}"
@@ -118,10 +115,7 @@ def render() -> None:
 
     st.subheader("Fundamentals")
     if fundamentals is None:
-        st.caption(
-            "No P/E reading on record yet. Run `uv run python scripts/refresh_live_data.py` -- "
-            "refreshed weekly, not daily, since P/E doesn't move day to day."
-        )
+        st.caption("No P/E reading available yet -- this updates weekly, since P/E doesn't move day to day.")
     else:
         pe_display = f"{fundamentals['pe_ratio']:.2f}" if fundamentals["pe_ratio"] is not None else "n/a"
         forward_pe_display = f"{fundamentals['forward_pe']:.2f}" if fundamentals["forward_pe"] is not None else "n/a"
@@ -148,11 +142,7 @@ def render() -> None:
             for q in quarterly_financials(session, symbol_id)
         ]
     if not financial_quarters:
-        st.caption(
-            "No quarterly financials on record yet. Run `uv run python scripts/refresh_live_data.py` -- "
-            "refreshed monthly, sharing Alpha Vantage's 25 requests/day budget with the P/E fallback "
-            "fetch above."
-        )
+        st.caption("No quarterly financials available yet -- this updates monthly.")
     else:
         render_financials_section(financial_quarters, ticker)
 
@@ -190,10 +180,7 @@ def render() -> None:
                 for c in competitor_snapshots(session, symbol_id)
             )
         if len(competitor_rows) == 1:
-            st.caption(
-                f"No competitor data on record yet for {ticker}. Run "
-                "`uv run python scripts/refresh_live_data.py` -- refreshed monthly."
-            )
+            st.caption(f"No competitor data available yet for {ticker} -- this updates monthly.")
         else:
             render_competitors_table(competitor_rows, ticker)
 
@@ -211,9 +198,7 @@ def render() -> None:
                 sentiment.date,
             )
     if sentiment is None:
-        st.caption(
-            "No sentiment reading on record. Run `uv run python scripts/refresh_live_data.py` to pull today's."
-        )
+        st.caption("No news sentiment reading available yet -- this updates daily.")
     else:
         st.write(
             f"**{sentiment_score:+.3f}** (roughly -1=bearish to +1=bullish), "
@@ -247,10 +232,7 @@ def render() -> None:
                 social.date,
             )
     if social is None:
-        st.caption(
-            "No social sentiment reading on record. Run `uv run python scripts/refresh_live_data.py` "
-            "to pull today's StockTwits-based reading."
-        )
+        st.caption("No social sentiment reading available yet -- this updates daily.")
     else:
         st.write(
             f"**{social_score:+.3f}** (roughly -1=bearish to +1=bullish), "
@@ -261,10 +243,7 @@ def render() -> None:
     with session_scope() as session:
         prediction = predict_symbol(session, symbol_id)
     if prediction is None or prediction.composite is None:
-        st.warning(
-            "No trained return model for this symbol yet. Run "
-            "`uv run python scripts/run_training.py` first."
-        )
+        st.warning("No prediction available for this symbol yet.")
     else:
         render_composite_breakdown(prediction.composite)
         with st.expander("Statistical model (secondary)", expanded=False):

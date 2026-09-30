@@ -533,9 +533,7 @@ def render_financials_section(quarters: list[dict], ticker: str) -> None:
             st.write(f"**{label}** {' and '.join(parts)}.")
 
     st.caption(
-        "Revenue/Net Income/EPS via Alpha Vantage's INCOME_STATEMENT/EARNINGS endpoints, refreshed "
-        "monthly. Free Cash Flow and Debt-to-Equity aren't shown -- they'd need two more Alpha Vantage "
-        "endpoints on the same shared 25 requests/day budget."
+        "Revenue/Net Income/EPS, refreshed monthly. Free Cash Flow and Debt-to-Equity aren't shown yet."
     )
 
 
@@ -590,9 +588,4 @@ def render_competitors_table(rows: list[dict], ticker: str) -> None:
             "52W High": st.column_config.NumberColumn(format="dollar"),
         },
     )
-    st.caption(
-        "Competitor relationships are hand-curated (see config/competitors.yaml), not derived live -- "
-        "Alpha Vantage's free tier has no \"list companies by industry\" endpoint. Refreshed monthly, "
-        "sharing Alpha Vantage's 25 requests/day budget for Market Cap/P-E (price/change/52-week range "
-        "are keyless and unlimited)."
-    )
+    st.caption("Competitor relationships are hand-curated, not derived live. Refreshed monthly.")
