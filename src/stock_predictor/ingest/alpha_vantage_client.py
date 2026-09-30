@@ -3,6 +3,13 @@
 INCOME_STATEMENT/EARNINGS via ingest/financials.py) -- one disk cache, one
 DailyRateLimiter.
 
+ingest/fundamentals.py's OVERVIEW call is no longer P/E-critical -- Finnhub
+(ingest/finnhub_client.py) is now the primary fundamentals source, with
+this module's OVERVIEW kept as a fallback and as the source of
+description/address. That leaves more of the shared 25/day budget
+effectively available to ingest/sentiment.py and ingest/financials.py,
+which remain fully dependent on this client.
+
 **Fixes a real bug**: each endpoint previously had its OWN independent
 rate limiter/cache (ingest/sentiment.py's original DailyRateLimiter), which
 would let two endpoints together exceed Alpha Vantage's real constraint --

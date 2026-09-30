@@ -6,16 +6,20 @@ changes.
 Usage:
     uv run python scripts/refresh_live_data.py [TICKER ...]
 
-News sentiment, fundamentals (P/E + company profile), and quarterly
-financials (revenue/net income/EPS) all require ALPHA_VANTAGE_API_KEY in
-.env and share one account-wide 25 requests/day budget (see
-ingest/alpha_vantage_client.py) -- fundamentals are only re-fetched
-weekly and financials monthly, not every run, to leave room for the daily
-sentiment calls. Social sentiment (StockTwits + VADER) is keyless and
-unrelated to that budget. Every one of these degrades to "skipped"
-per-symbol (never raises) on failure; price refresh and training still
-proceed either way. Alerts require DISCORD_WEBHOOK_URL in .env -- skipped
-(not an error) if unset.
+News sentiment and quarterly financials (revenue/net income/EPS) require
+ALPHA_VANTAGE_API_KEY in .env and share one account-wide 25 requests/day
+budget (see ingest/alpha_vantage_client.py) -- financials are only
+re-fetched monthly, not every run, to leave room for the daily sentiment
+calls. Fundamentals (P/E + company profile) now come primarily from
+FINNHUB_API_KEY (free tier: 60 requests/minute, no daily cap -- see
+ingest/finnhub_client.py), with Alpha Vantage's OVERVIEW still called
+weekly as a fallback and as the sole source of description/address (see
+ingest/fundamentals.py) -- a small, budget-friendly addition to the shared
+25/day total, not the load-bearing call it used to be. Social sentiment
+(StockTwits + VADER) is keyless and unrelated to either budget. Every one
+of these degrades to "skipped" per-symbol (never raises) on failure; price
+refresh and training still proceed either way. Alerts require
+DISCORD_WEBHOOK_URL in .env -- skipped (not an error) if unset.
 """
 
 from __future__ import annotations
