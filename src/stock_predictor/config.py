@@ -67,5 +67,9 @@ def alpha_vantage_api_key() -> str | None:
     return os.environ.get("ALPHA_VANTAGE_API_KEY") or None
 
 
+def finnhub_api_key() -> str | None:
+    return os.environ.get("FINNHUB_API_KEY") or None
+
+
 def discord_webhook_url() -> str | None:
     return os.environ.get("DISCORD_WEBHOOK_URL") or None

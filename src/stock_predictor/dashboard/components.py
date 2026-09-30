@@ -283,8 +283,10 @@ def render_recent_articles(articles: list[dict]) -> None:
 
 def render_company_background(fundamentals: dict) -> None:
     """The company's own descriptive profile (sector/industry/exchange/
-    description/website) -- same Alpha Vantage OVERVIEW call already made
-    for P/E (see ingest/fundamentals.py), no extra API cost. A no-op if no
+    description/website). Description/address always come from Alpha
+    Vantage's OVERVIEW call (Finnhub's profile has no equivalent field);
+    the rest may come from either source -- see
+    ingest/fundamentals.py::fetch_overview's merge. A no-op if no
     description is on record yet (no fundamentals snapshot, or a symbol
     Alpha Vantage doesn't cover).
 

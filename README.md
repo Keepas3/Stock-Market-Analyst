@@ -14,6 +14,10 @@ daily prices (weighted toward recent data) plus recent news sentiment
 - News sentiment from Alpha Vantage's `NEWS_SENTIMENT` endpoint (free,
   25 requests/day -- see `config/watchlist.yaml`'s curated ~15-20 symbol
   list, sized to fit that budget).
+- Fundamentals (P/E ratio, company profile) primarily from Finnhub's free
+  tier (60 requests/minute, no daily cap), with Alpha Vantage's `OVERVIEW`
+  kept as a fallback and as the source of the company description/address
+  (see `ingest/fundamentals.py`).
 - A per-symbol return-distribution fit (time-decay-weighted mean/
   volatility, Student-t tails) -- the Dixon-Coles analog, just simpler:
   each symbol is fit independently, no cross-symbol interaction.
@@ -32,7 +36,7 @@ incrementally, not all at once).
 
 ```bash
 uv sync
-cp .env.example .env   # fill in ALPHA_VANTAGE_API_KEY
+cp .env.example .env   # fill in ALPHA_VANTAGE_API_KEY and FINNHUB_API_KEY
 uv run python scripts/fetch_historical_data.py
 uv run python scripts/refresh_live_data.py
 uv run streamlit run src/stock_predictor/dashboard/app.py
