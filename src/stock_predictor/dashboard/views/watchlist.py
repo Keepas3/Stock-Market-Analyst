@@ -43,13 +43,9 @@ def render() -> None:
 
     selected = render_symbol_table(filtered, key="watchlist_table")
 
-    st.caption(
-        "Click a row, then use the buttons below to remove it from your Watchlist or view its full "
-        "breakdown. MA Signal/P/E/News Sentiment/Social Sentiment/Recommendation are blank until "
-        "`uv run python scripts/run_training.py` has fit that symbol's return model at least once "
-        "and `uv run python scripts/refresh_live_data.py` has pulled its fundamentals/sentiment readings."
-    )
-
+    # Right below the table (not after the caption) -- with the table's
+    # own height now capped (see components.MAX_TABLE_HEIGHT), these are
+    # reachable with at most one short scroll after selecting a row.
     if selected is not None:
         symbol_id = int(selected["symbol_id"])
         col1, col2 = st.columns(2)
@@ -61,3 +57,10 @@ def render() -> None:
         with col2:
             if st.button(f"View {selected['Ticker']} full detail →", key=f"view_{symbol_id}"):
                 st.switch_page(navigation.symbol_detail_page(), query_params={"symbol": str(symbol_id)})
+
+    st.caption(
+        "Click a row to reveal buttons for removing it from your Watchlist or viewing its full "
+        "breakdown. MA Signal/P/E/News Sentiment/Social Sentiment/Recommendation are blank until "
+        "`uv run python scripts/run_training.py` has fit that symbol's return model at least once "
+        "and `uv run python scripts/refresh_live_data.py` has pulled its fundamentals/sentiment readings."
+    )

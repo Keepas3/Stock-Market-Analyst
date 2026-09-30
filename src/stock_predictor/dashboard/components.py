@@ -46,6 +46,13 @@ WATCHLIST_DISPLAY_COLUMNS = (
 # why the actual add/remove control is a button pair, not this column.
 SYMBOL_TABLE_DISPLAY_COLUMNS = WATCHLIST_DISPLAY_COLUMNS + ("Watchlist",)
 
+# render_symbol_table's row height cap -- about a dozen rows visible
+# (35px/row + header) before the grid's own scrollbar takes over, so the
+# page below it (the Add/Remove Watchlist and View buttons for whatever
+# row is selected) stays reachable without a long scroll on a large
+# watchlist. See render_symbol_table's own comment for why.
+MAX_TABLE_HEIGHT = 440
+
 _MA_SIGNAL_LABELS = {1: "Golden Cross", -1: "Death Cross", 0: "Neutral"}
 
 # 52-week range window -- calendar days, matching how "52-week high/low" is
@@ -190,11 +197,20 @@ def render_symbol_table(df: pd.DataFrame, key: str) -> dict | None:
     if df.empty:
         return None
 
+    # Capped, not "35 * (len(df) + 1)" grown to fit every row -- with ~50
+    # tracked symbols that used to make the table (and everything below
+    # it, including the Add/Remove Watchlist and View buttons) over 1800px
+    # tall, so selecting a company meant scrolling well past the table to
+    # find them. Capping gives the grid its own internal scrollbar instead
+    # -- the buttons for whatever row you've selected stay one short
+    # scroll (or none) below the table regardless of watchlist size.
+    height = min(35 * (len(df) + 1) + 3, MAX_TABLE_HEIGHT)
+
     event = st.dataframe(
         df.style.map(color_by_sign, subset=["Change", "% Change"]),
         use_container_width=True,
         hide_index=True,
-        height=35 * (len(df) + 1) + 3,
+        height=height,
         column_order=SYMBOL_TABLE_DISPLAY_COLUMNS,
         column_config=_SYMBOL_TABLE_COLUMN_CONFIG,
         on_select="rerun",
