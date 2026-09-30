@@ -1,0 +1,25 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Project data (downloaded/generated locally)
+data/raw/*
+!data/raw/.gitkeep
+data/*.db
+!data/stocks.db
+data/*.db.bak-*
+data/cache/
+
+# Secrets
+.env
+
+# Editors
+.vscode/
+.idea/

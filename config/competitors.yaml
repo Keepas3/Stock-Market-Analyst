@@ -1,0 +1,25 @@
+# Hand-curated real competitor relationships, one list per watched ticker
+# -- see src/stock_predictor/config.py::load_competitor_map's own
+# docstring for why this is manual, not live-derived: Alpha Vantage's
+# free tier has no "list companies by industry" endpoint. Same
+# hand-curated shape as soccer-predictor's config/captains.yaml -- add/
+# remove entries any time, no code changes needed. Only include tickers
+# genuinely liquid/well-covered on major US exchanges, so competitor
+# price/fundamentals lookups (ingest/competitors.py) reliably succeed.
+competitors:
+  AAPL: [MSFT, GOOGL, DELL]
+  MSFT: [GOOGL, AAPL, ORCL]
+  GOOGL: [MSFT, META, AMZN]
+  AMZN: [WMT, EBAY, TGT]
+  NVDA: [AMD, INTC, AVGO, QCOM]
+  META: [GOOGL, SNAP, PINS]
+  TSLA: [F, GM, RIVN]
+  JPM: [BAC, WFC, C]
+  V: [MA, AXP, PYPL]
+  WMT: [TGT, COST, AMZN]
+  JNJ: [PFE, MRK, ABBV]
+  PG: [CL, KMB, UL]
+  XOM: [CVX, BP, SHEL]
+  DIS: [NFLX, CMCSA, WBD]
+  NFLX: [DIS, WBD, PARA]
+  KO: [PEP, KDP]

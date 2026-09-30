@@ -1,0 +1,30 @@
+[project]
+name = "stock-predictor"
+version = "0.1.0"
+description = "Stock price/sentiment predictor -- ported architecture from soccer-predictor"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "numpy>=2.5.3",
+    "pandas>=3.0.6",
+    "plotly>=7.1.0",
+    "python-dotenv>=1.2.3",
+    "pyyaml>=6.0.3",
+    "requests>=2.34.2",
+    "scipy>=1.18.1",
+    "sqlalchemy>=2.1.1",
+    "streamlit>=1.64.0",
+    "vaderSentiment>=3.3.2",
+]
+
+[project.scripts]
+stock-predictor = "stock_predictor:main"
+
+[build-system]
+requires = ["uv_build>=0.12.19,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
