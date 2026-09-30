@@ -16,6 +16,7 @@ from stock_predictor.storage.models import (
     CompetitorSnapshot,
     FundamentalsSnapshot,
     NewsArticleSnapshot,
+    PriceAlert,
     PriceBar,
     QuarterlyFinancialsSnapshot,
     RecommendationLog,
@@ -60,6 +61,79 @@ def set_watchlisted(session: Session, symbol_id: int, value: bool) -> None:
     symbol = session.get(Symbol, symbol_id)
     if symbol is not None:
         symbol.is_watchlisted = value
+
+
+def get_alert_threshold(session: Session, symbol_id: int) -> PriceAlert | None:
+    return session.scalar(select(PriceAlert).where(PriceAlert.symbol_id == symbol_id))
+
+
+def set_alert_threshold(
+    session: Session, symbol_id: int, upper_price: float | None, lower_price: float | None
+) -> None:
+    """Upserts this symbol's price-alert threshold(s) -- called from the
+    Watchlist page's Save button (see dashboard/views/watchlist.py).
+    Resets both above_triggered/below_triggered to False on every save,
+    even if only one side changed: a newly (re)confirmed target should
+    start "unwatched" again so scripts/check_price_alerts.py treats the
+    next crossing as fresh, rather than silently suppressing an alert
+    because the OLD threshold happened to already be triggered.
+    """
+    existing = session.scalar(select(PriceAlert).where(PriceAlert.symbol_id == symbol_id))
+    now = dt.datetime.now(dt.UTC).replace(tzinfo=None)
+    if existing is not None:
+        existing.upper_price = upper_price
+        existing.lower_price = lower_price
+        existing.above_triggered = False
+        existing.below_triggered = False
+        existing.updated_at = now
+        return
+    session.add(
+        PriceAlert(
+            symbol_id=symbol_id,
+            upper_price=upper_price,
+            lower_price=lower_price,
+            above_triggered=False,
+            below_triggered=False,
+            updated_at=now,
+        )
+    )
+
+
+def symbols_with_alert_thresholds(session: Session) -> list[tuple[Symbol, PriceAlert]]:
+    """Every symbol scripts/check_price_alerts.py should actually poll --
+    watchlisted AND with at least one threshold set. A symbol removed from
+    the Watchlist keeps its PriceAlert row (so re-adding it later restores
+    the threshold) but is excluded here until is_watchlisted is True again.
+    """
+    rows = session.execute(
+        select(Symbol, PriceAlert)
+        .join(PriceAlert, PriceAlert.symbol_id == Symbol.id)
+        .where(
+            Symbol.is_watchlisted.is_(True),
+            (PriceAlert.upper_price.is_not(None)) | (PriceAlert.lower_price.is_not(None)),
+        )
+        .order_by(Symbol.ticker)
+    ).all()
+    return [(row[0], row[1]) for row in rows]
+
+
+def set_alert_triggered_state(
+    session: Session, symbol_id: int, *, above: bool | None = None, below: bool | None = None
+) -> None:
+    """Flips just the side(s) passed -- called by scripts/check_price_alerts.py
+    after a crossing fires (or after price returns back within range, to
+    re-arm that side for a future crossing). A no-op if this symbol has no
+    PriceAlert row (shouldn't happen from the script's own loop, but stays
+    a plain write rather than raising, same degrade-quietly spirit as
+    set_watchlisted).
+    """
+    alert = session.scalar(select(PriceAlert).where(PriceAlert.symbol_id == symbol_id))
+    if alert is None:
+        return
+    if above is not None:
+        alert.above_triggered = above
+    if below is not None:
+        alert.below_triggered = below
 
 
 def upsert_price_bar(

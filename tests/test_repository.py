@@ -10,6 +10,7 @@ from stock_predictor.storage.models import Base
 from stock_predictor.storage.repository import (
     all_symbols,
     competitor_snapshots,
+    get_alert_threshold,
     get_or_create_symbol,
     latest_competitor_snapshot_fetch_time,
     latest_fundamentals,
@@ -28,8 +29,11 @@ from stock_predictor.storage.repository import (
     replace_recent_articles,
     replace_sentiment_snapshot,
     replace_social_sentiment_snapshot,
+    set_alert_threshold,
+    set_alert_triggered_state,
     set_watchlisted,
     symbol_by_ticker,
+    symbols_with_alert_thresholds,
     upsert_price_bar,
     watchlisted_symbols,
 )
@@ -70,6 +74,88 @@ def test_set_watchlisted_adds_and_removes(session):
 def test_set_watchlisted_on_unknown_symbol_id_is_a_no_op(session):
     set_watchlisted(session, 999, True)  # doesn't raise
     assert watchlisted_symbols(session) == []
+
+
+def test_set_alert_threshold_creates_and_updates(session):
+    symbol = get_or_create_symbol(session, "AAPL", "Apple Inc.")
+
+    set_alert_threshold(session, symbol.id, upper_price=200.0, lower_price=150.0)
+    alert = get_alert_threshold(session, symbol.id)
+    assert alert.upper_price == 200.0
+    assert alert.lower_price == 150.0
+    assert alert.above_triggered is False
+    assert alert.below_triggered is False
+
+    set_alert_threshold(session, symbol.id, upper_price=210.0, lower_price=None)
+    alert = get_alert_threshold(session, symbol.id)
+    assert alert.upper_price == 210.0
+    assert alert.lower_price is None
+
+
+def test_set_alert_threshold_resets_triggered_flags_on_change(session):
+    symbol = get_or_create_symbol(session, "AAPL", "Apple Inc.")
+    set_alert_threshold(session, symbol.id, upper_price=200.0, lower_price=None)
+    set_alert_triggered_state(session, symbol.id, above=True)
+    assert get_alert_threshold(session, symbol.id).above_triggered is True
+
+    set_alert_threshold(session, symbol.id, upper_price=210.0, lower_price=None)
+    assert get_alert_threshold(session, symbol.id).above_triggered is False
+
+
+def test_get_alert_threshold_returns_none_when_unset(session):
+    symbol = get_or_create_symbol(session, "AAPL", "Apple Inc.")
+    assert get_alert_threshold(session, symbol.id) is None
+
+
+def test_symbols_with_alert_thresholds_requires_watchlisted_and_a_threshold(session):
+    watchlisted_with_threshold = get_or_create_symbol(session, "AAPL", "Apple Inc.")
+    set_watchlisted(session, watchlisted_with_threshold.id, True)
+    set_alert_threshold(session, watchlisted_with_threshold.id, upper_price=200.0, lower_price=None)
+
+    watchlisted_no_threshold = get_or_create_symbol(session, "MSFT", "Microsoft Corporation")
+    set_watchlisted(session, watchlisted_no_threshold.id, True)
+
+    not_watchlisted_with_threshold = get_or_create_symbol(session, "TSLA", "Tesla Inc.")
+    set_alert_threshold(session, not_watchlisted_with_threshold.id, upper_price=300.0, lower_price=None)
+
+    results = symbols_with_alert_thresholds(session)
+    assert [s.ticker for s, _ in results] == ["AAPL"]
+
+
+def test_symbols_with_alert_thresholds_excludes_a_symbol_unwatchlisted_after_being_set(session):
+    """A removed-from-Watchlist symbol keeps its PriceAlert row (so
+    re-adding it restores the threshold) but is excluded from the poll
+    list until is_watchlisted is True again.
+    """
+    symbol = get_or_create_symbol(session, "AAPL", "Apple Inc.")
+    set_watchlisted(session, symbol.id, True)
+    set_alert_threshold(session, symbol.id, upper_price=200.0, lower_price=None)
+
+    set_watchlisted(session, symbol.id, False)
+
+    assert symbols_with_alert_thresholds(session) == []
+    assert get_alert_threshold(session, symbol.id) is not None  # threshold itself preserved
+
+
+def test_set_alert_triggered_state_only_updates_the_side_passed(session):
+    symbol = get_or_create_symbol(session, "AAPL", "Apple Inc.")
+    set_alert_threshold(session, symbol.id, upper_price=200.0, lower_price=150.0)
+
+    set_alert_triggered_state(session, symbol.id, above=True)
+    alert = get_alert_threshold(session, symbol.id)
+    assert alert.above_triggered is True
+    assert alert.below_triggered is False
+
+    set_alert_triggered_state(session, symbol.id, below=True)
+    alert = get_alert_threshold(session, symbol.id)
+    assert alert.above_triggered is True  # untouched
+    assert alert.below_triggered is True
+
+
+def test_set_alert_triggered_state_on_symbol_without_alert_row_is_a_no_op(session):
+    symbol = get_or_create_symbol(session, "AAPL", "Apple Inc.")
+    set_alert_triggered_state(session, symbol.id, above=True)  # doesn't raise
+    assert get_alert_threshold(session, symbol.id) is None
 
 
 def test_symbol_by_ticker_returns_none_when_missing(session):
