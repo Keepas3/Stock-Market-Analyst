@@ -71,8 +71,10 @@ def render() -> None:
         st.subheader(f"Price alert -- {selected['Ticker']}")
         with session_scope() as session:
             existing_alert = get_alert_threshold(session, symbol_id)
-        existing_upper = existing_alert.upper_price if existing_alert else None
-        existing_lower = existing_alert.lower_price if existing_alert else None
+            # Extract while the session is open -- see symbol_detail.py for
+            # the same DetachedInstanceError reasoning.
+            existing_upper = existing_alert.upper_price if existing_alert else None
+            existing_lower = existing_alert.lower_price if existing_alert else None
 
         alert_col1, alert_col2 = st.columns(2)
         with alert_col1:
