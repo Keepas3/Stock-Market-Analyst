@@ -19,6 +19,7 @@ from stock_predictor.dashboard.components import (
     render_financials_section,
     render_prediction_breakdown,
     render_recent_articles,
+    sentiment_label,
 )
 from stock_predictor.prediction.service import predict_symbol
 from stock_predictor.storage.db import session_scope
@@ -235,7 +236,8 @@ def render() -> None:
         st.caption("No social sentiment reading available yet -- this updates daily.")
     else:
         st.write(
-            f"**{social_score:+.3f}** (roughly -1=bearish to +1=bullish), "
+            f"Social media views this company as **{sentiment_label(social_score)}** "
+            f"({social_score:+.3f}, roughly -1=bearish to +1=bullish), "
             f"from {social_count} recent post(s) on {social_date}."
         )
 

@@ -55,6 +55,27 @@ MAX_TABLE_HEIGHT = 440
 
 _MA_SIGNAL_LABELS = {1: "Golden Cross", -1: "Death Cross", 0: "Neutral"}
 
+# Bands for turning a raw -1..+1 sentiment score (news or social) into plain
+# English. Wider than technical_score.py's own +1/0/-1 vote banding
+# (SENTIMENT_VOTE_BULLISH/BEARISH = +-0.15) -- that's a coarser signal for
+# the composite vote math, this is just display wording -- but "neutral"
+# still lines up with the same +-0.15 no-vote zone so the label never
+# contradicts the vote shown in "Show the math".
+def sentiment_label(score: float) -> str:
+    if score >= 0.5:
+        return "very positive"
+    if score >= 0.15:
+        return "mostly positive"
+    if score >= 0.05:
+        return "slightly positive"
+    if score > -0.05:
+        return "neutral"
+    if score > -0.15:
+        return "slightly negative"
+    if score > -0.5:
+        return "mostly negative"
+    return "very negative"
+
 # 52-week range window -- calendar days, matching how "52-week high/low" is
 # conventionally quoted (trailing year from the most recent bar), not a
 # trading-day count.
@@ -341,24 +362,83 @@ def render_prediction_breakdown(prediction, ticker: str) -> None:
     )
 
 
+_FACTOR_LABELS = {
+    "ma_vote": "price trend",
+    "pe_vote": "valuation (P/E)",
+    "news_vote": "news sentiment",
+    "social_vote": "social media sentiment",
+}
+
+_VOTE_PHRASES = {
+    "ma_vote": {
+        1: "just crossed bullish (Golden Cross)",
+        -1: "just crossed bearish (Death Cross)",
+        0: "shows no clear trend yet",
+    },
+    "pe_vote": {
+        1: "looks attractively cheap",
+        -1: "looks relatively expensive",
+        0: "is neither cheap nor expensive (or not available yet)",
+    },
+    "news_vote": {1: "is positive", -1: "is negative", 0: "is neutral or not available yet"},
+    "social_vote": {1: "is positive", -1: "is negative", 0: "is neutral or not available yet"},
+}
+
+_VERDICT_PHRASES = {
+    "Buy": "Buying looks reasonable here",
+    "Sell": "Selling looks reasonable here",
+    "Hold": "It's best to hold off for now",
+}
+
+
+def _humanize_list(items: list[str]) -> str:
+    if len(items) <= 1:
+        return "".join(items)
+    return ", ".join(items[:-1]) + f", and {items[-1]}"
+
+
+def _composite_tldr(signal: CompositeSignal) -> str:
+    """One plain-English sentence summarizing the same four votes shown in
+    "Show the math" below -- e.g. "Buying looks reasonable here: price
+    trend just crossed bullish (Golden Cross), ... and social media
+    sentiment is positive." Always lists all four factors (not just the
+    ones agreeing with the verdict) so a Hold caused by mixed signals, or a
+    Buy/Sell reached despite one dissenting factor, is still fully
+    explained rather than cherry-picked.
+    """
+    clauses = [
+        f"{_FACTOR_LABELS[key]} {_VOTE_PHRASES[key][vote]}"
+        for key, vote in (
+            ("ma_vote", signal.ma_vote),
+            ("pe_vote", signal.pe_vote),
+            ("news_vote", signal.news_vote),
+            ("social_vote", signal.social_vote),
+        )
+    ]
+    return f"{_VERDICT_PHRASES[signal.recommendation]}: {_humanize_list(clauses)}."
+
+
 def render_composite_breakdown(signal: CompositeSignal) -> None:
-    """Shows each of the four votes plainly behind the composite
-    Recommendation (see model/technical_score.py) -- the primary
-    Buy/Hold/Sell surface as of Phase 2, mirroring
-    render_prediction_breakdown's "show the actual math" transparency for
-    a simple equal-weighted vote sum instead of a probability distribution.
+    """Shows the composite Recommendation (see model/technical_score.py) --
+    the primary Buy/Hold/Sell surface as of Phase 2 -- as a plain-English
+    TL;DR first, then the same four votes behind it tucked into an
+    expander for anyone who wants to check the actual math (same
+    transparency goal as render_prediction_breakdown, just not dumping the
+    raw +1/0/-1 numbers in the reader's face up front).
     """
     st.markdown(f"**Recommendation: {signal.recommendation}**")
-    st.write(
-        f"MA signal: **{signal.ma_vote:+d}** · P/E: **{signal.pe_vote:+d}** · "
-        f"News sentiment: **{signal.news_vote:+d}** · Social sentiment: **{signal.social_vote:+d}** "
-        f"→ total **{signal.total:+d}**"
-    )
-    st.caption(
-        "Each signal casts one vote (+1 bullish, -1 bearish, 0 neutral/no data yet). Buy needs a "
-        f"total of +{BUY_VOTE_THRESHOLD} or higher, Sell needs {SELL_VOTE_THRESHOLD} or lower, "
-        "otherwise Hold -- a simple, equal-weighted, non-backtested heuristic, not financial advice."
-    )
+    st.write(_composite_tldr(signal))
+    with st.expander("Show the math", expanded=False):
+        st.write(
+            f"MA signal: **{signal.ma_vote:+d}** · P/E: **{signal.pe_vote:+d}** · "
+            f"News sentiment: **{signal.news_vote:+d}** · Social sentiment: **{signal.social_vote:+d}** "
+            f"→ total **{signal.total:+d}**"
+        )
+        st.caption(
+            "Each signal casts one vote (+1 bullish, -1 bearish, 0 neutral/no data yet). Buy needs a "
+            f"total of +{BUY_VOTE_THRESHOLD} or higher, Sell needs {SELL_VOTE_THRESHOLD} or lower, "
+            "otherwise Hold -- a simple, equal-weighted, non-backtested heuristic, not financial advice."
+        )
 
 
 def render_recent_articles(articles: list[dict]) -> None:
