@@ -19,7 +19,10 @@ that sentiment no longer draws from it at all. Social sentiment
 (StockTwits + VADER) is keyless and unrelated to any of these budgets.
 Every one of these degrades to "skipped" per-symbol (never raises) on
 failure; price refresh and training still proceed either way. Alerts
-require DISCORD_WEBHOOK_URL in .env -- skipped (not an error) if unset.
+require DISCORD_WEBHOOK_URL in .env -- skipped (not an error) if unset --
+and only fire for symbols with Symbol.is_watchlisted set (i.e. starred on
+the Watchlist page), even though data for the full config/watchlist.yaml
+universe is refreshed and retrained regardless.
 """
 
 from __future__ import annotations
@@ -75,7 +78,9 @@ def main() -> None:
         print(f"{ticker} ({entry.name})")
 
         with session_scope() as session:
-            symbol_id = get_or_create_symbol(session, entry.ticker, entry.name, entry.sector).id
+            symbol = get_or_create_symbol(session, entry.ticker, entry.name, entry.sector)
+            symbol_id = symbol.id
+            is_watchlisted = symbol.is_watchlisted
 
         bars = fetch_recent_bars(ticker)
         with session_scope() as session:
@@ -235,8 +240,11 @@ def main() -> None:
             previous_label = previous.recommendation if previous is not None else None
         print(f"  recommendation: {new_recommendation}")
         if previous_label is not None:
-            alerted = send_webhook_alert(f"{ticker}: {previous_label} -> {new_recommendation}")
-            print(f"  alert: {'sent' if alerted else 'skipped (no webhook configured or send failed)'}")
+            if not is_watchlisted:
+                print("  alert: skipped (symbol not on Watchlist)")
+            else:
+                alerted = send_webhook_alert(f"{ticker}: {previous_label} -> {new_recommendation}")
+                print(f"  alert: {'sent' if alerted else 'skipped (no webhook configured or send failed)'}")
 
 
 if __name__ == "__main__":
