@@ -13,6 +13,22 @@ import requests
 from stock_predictor.config import discord_webhook_url
 
 
+def format_price_move(price: float, previous_close: float | None) -> str:
+    """e.g. "$333.02 (up $3.62, +1.10% vs prev close $329.40)" -- plain
+    words rather than arrows/emoji so it reads the same in Discord and
+    Slack. Falls back to just the price if there's no previous close to
+    compare against (or it's zero).
+    """
+    if not previous_close:
+        return f"${price:.2f}"
+    change = price - previous_close
+    pct = change / previous_close
+    direction = "up" if change > 0 else "down" if change < 0 else "unchanged"
+    if direction == "unchanged":
+        return f"${price:.2f} (unchanged vs prev close ${previous_close:.2f})"
+    return f"${price:.2f} ({direction} ${abs(change):.2f}, {pct:+.2%} vs prev close ${previous_close:.2f})"
+
+
 def send_webhook_alert(message: str) -> bool:
     """POSTs `message` as a Discord-shaped `{"content": ...}` payload
     (Slack's "Incoming Webhooks" integration also accepts this exact

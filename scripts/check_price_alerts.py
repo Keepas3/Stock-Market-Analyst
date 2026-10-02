@@ -26,7 +26,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from stock_predictor.alerts.notifier import send_webhook_alert  # noqa: E402
+from stock_predictor.alerts.notifier import format_price_move, send_webhook_alert  # noqa: E402
 from stock_predictor.ingest.quote import fetch_quote  # noqa: E402
 from stock_predictor.storage.db import init_db, session_scope  # noqa: E402
 from stock_predictor.storage.repository import (  # noqa: E402
@@ -67,7 +67,8 @@ def main() -> None:
         if upper_price is not None:
             if price >= upper_price and not above_triggered:
                 alerted = send_webhook_alert(
-                    f"{ticker} crossed above your alert threshold: ${price:.2f} >= ${upper_price:.2f}"
+                    f"{ticker} crossed above your ${upper_price:.2f} alert threshold: "
+                    f"now {format_price_move(price, quote.previous_close)}"
                 )
                 status = "sent" if alerted else "skipped (webhook not configured or failed)"
                 print(f"  above ${upper_price:.2f}: alert {status}")
@@ -81,7 +82,8 @@ def main() -> None:
         if lower_price is not None:
             if price <= lower_price and not below_triggered:
                 alerted = send_webhook_alert(
-                    f"{ticker} crossed below your alert threshold: ${price:.2f} <= ${lower_price:.2f}"
+                    f"{ticker} crossed below your ${lower_price:.2f} alert threshold: "
+                    f"now {format_price_move(price, quote.previous_close)}"
                 )
                 status = "sent" if alerted else "skipped (webhook not configured or failed)"
                 print(f"  below ${lower_price:.2f}: alert {status}")

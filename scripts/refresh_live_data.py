@@ -33,7 +33,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from stock_predictor.alerts.notifier import send_webhook_alert  # noqa: E402
+from stock_predictor.alerts.notifier import format_price_move, send_webhook_alert  # noqa: E402
 from stock_predictor.config import competitors_for, load_watchlist  # noqa: E402
 from stock_predictor.ingest.competitors import fetch_competitor_snapshot  # noqa: E402
 from stock_predictor.ingest.financials import fetch_quarterly_financials  # noqa: E402
@@ -51,6 +51,7 @@ from stock_predictor.storage.repository import (  # noqa: E402
     latest_quarterly_financials_fetch_time,
     latest_recommendation_log,
     log_recommendation,
+    price_bars_for_symbol,
     replace_competitor_snapshots,
     replace_fundamentals_snapshot,
     replace_quarterly_financials,
@@ -253,7 +254,14 @@ def main() -> None:
             if not is_watchlisted:
                 print("  alert: skipped (symbol not on Watchlist)")
             else:
-                alerted = send_webhook_alert(f"{ticker}: {previous_label} -> {new_recommendation}")
+                with session_scope() as session:
+                    closes = price_bars_for_symbol(session, symbol_id)["close"]
+                latest_close = float(closes.iloc[-1]) if len(closes) else None
+                previous_close = float(closes.iloc[-2]) if len(closes) >= 2 else None
+                price_note = f" | {format_price_move(latest_close, previous_close)}" if latest_close else ""
+                alerted = send_webhook_alert(
+                    f"{ticker}: {previous_label} -> {new_recommendation}{price_note}"
+                )
                 print(f"  alert: {'sent' if alerted else 'skipped (no webhook configured or send failed)'}")
 
 
