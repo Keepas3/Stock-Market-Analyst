@@ -10,4 +10,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Ping app
-        run: curl -sSfL --max-time 30 https://stock-market-analyst.streamlit.app/ -o /dev/null
+        # -c/-b (cookie jar): Streamlit Community Cloud's "waking up"
+        # interstitial sets a cookie and expects it echoed back to break
+        # out of its redirect chain -- plain `curl -L` with no cookie jar
+        # never stores it and loops until curl's 50-redirect cap trips
+        # (confirmed live: exit code 47 "Maximum (50) redirects followed").
+        # --max-redirs is a sane cap in case the loop ever recurs anyway.
+        run: |
+          curl -sSfL --max-time 60 --max-redirs 20 \
+            -c cookies.txt -b cookies.txt \
+            https://stock-market-analyst.streamlit.app/ -o /dev/null
