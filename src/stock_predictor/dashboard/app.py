@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from stock_predictor.dashboard import navigation  # noqa: E402
 from stock_predictor.storage.db import init_db  # noqa: E402
 
-st.set_page_config(page_title="Stock Predictor", page_icon=":material/query_stats:", layout="wide")
+st.set_page_config(page_title="Stock Market Analyst", page_icon=":material/query_stats:", layout="wide")
 init_db()
 
 pg = st.navigation(
