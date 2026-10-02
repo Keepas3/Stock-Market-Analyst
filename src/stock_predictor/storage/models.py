@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, String, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -213,6 +213,34 @@ class SocialSentimentSnapshot(Base):
     date: Mapped[dt.date] = mapped_column(Date, index=True)
     overall_sentiment_score: Mapped[float]
     message_count: Mapped[int]
+    fetched_at: Mapped[dt.datetime] = mapped_column(DateTime)
+
+
+class SocialPostSnapshot(Base):
+    """One of the current top-N most recent social-media posts for a
+    symbol (see ingest/social_sentiment.py::fetch_recent_posts) -- lets a
+    user read the actual posts behind SocialSentimentSnapshot's aggregated
+    score, same purpose as NewsArticleSnapshot for news. Always fully
+    replaced on refresh (see
+    storage/repository.py::replace_recent_social_posts), not accumulated
+    -- these represent "recent," not a permanent archive.
+
+    username/external_id are StockTwits' own user handle and message id,
+    kept so a post can link back to its live StockTwits permalink
+    (https://stocktwits.com/{username}/message/{external_id}) -- both
+    nullable since a malformed entry without them should still be
+    storable rather than dropped.
+    """
+
+    __tablename__ = "social_post_snapshots"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    symbol_id: Mapped[int] = mapped_column(ForeignKey("symbols.id"), index=True)
+    body: Mapped[str]
+    username: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+    external_id: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
+    tagged_sentiment: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+    posted_at: Mapped[dt.datetime | None] = mapped_column(DateTime, nullable=True, default=None)
     fetched_at: Mapped[dt.datetime] = mapped_column(DateTime)
 
 

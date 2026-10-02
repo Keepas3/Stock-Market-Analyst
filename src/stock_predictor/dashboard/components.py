@@ -465,6 +465,44 @@ def render_recent_articles(articles: list[dict]) -> None:
         st.caption(f"{article['source']} · {published}")
 
 
+def render_recent_social_posts(posts: list[dict]) -> None:
+    """A sample of the raw social posts behind a symbol's Social Sentiment
+    score (see ingest/social_sentiment.py::fetch_recent_posts) -- same "let
+    the user read the real data instead of just trusting one aggregated
+    number" purpose as render_recent_articles for news.
+
+    Takes plain dicts (body/username/external_id/tagged_sentiment/
+    posted_at), not SocialPostSnapshot ORM rows -- same detached-instance-
+    avoidance reasoning as render_recent_articles.
+    """
+    if not posts:
+        return
+
+    st.markdown("**Recent posts**")
+    for post in posts:
+        posted = post["posted_at"].strftime("%Y-%m-%d %H:%M UTC") if post["posted_at"] else "date unknown"
+        username = post["username"]
+        if username and post["external_id"] is not None:
+            # Confirmed live (2026-09) against StockTwits' own raw message
+            # shape -- see ingest/social_sentiment.py's module docstring
+            # for the general source caveats.
+            handle = f"[@{username}](https://stocktwits.com/{username}/message/{post['external_id']})"
+        elif username:
+            handle = f"**@{username}**"
+        else:
+            handle = "**Anonymous**"
+        # Cashtags like "$AAPL" are everywhere in these posts -- st.markdown
+        # treats a bare "$" as a LaTeX math delimiter, so left unescaped a
+        # post mentioning two or more tickers renders everything between
+        # them as a garbled math block (confirmed live). Escaping every "$"
+        # is blunt but safe; these bodies are never meant to render real
+        # LaTeX anyway.
+        body = post["body"].replace("$", "\\$")
+        st.markdown(f"{handle}: {body}")
+        tag = f" · {post['tagged_sentiment']}" if post["tagged_sentiment"] else ""
+        st.caption(f"StockTwits · {posted}{tag}")
+
+
 def render_company_background(fundamentals: dict) -> None:
     """The company's own descriptive profile (sector/industry/exchange/
     description/website). Description/address always come from Alpha

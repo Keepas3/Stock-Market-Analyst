@@ -19,6 +19,7 @@ from stock_predictor.dashboard.components import (
     render_financials_section,
     render_prediction_breakdown,
     render_recent_articles,
+    render_recent_social_posts,
     sentiment_label,
 )
 from stock_predictor.prediction.service import predict_symbol
@@ -31,6 +32,7 @@ from stock_predictor.storage.repository import (
     price_bars_for_symbol,
     quarterly_financials,
     recent_articles,
+    recent_social_posts,
     symbol_by_id,
 )
 
@@ -240,6 +242,21 @@ def render() -> None:
             f"({social_score:+.3f}, roughly -1=bearish to +1=bullish), "
             f"from {social_count} recent post(s) on {social_date}."
         )
+
+    with session_scope() as session:
+        # Extract to plain dicts while the session is open -- same
+        # detached-instance reasoning as article_rows above.
+        social_post_rows = [
+            {
+                "body": p.body,
+                "username": p.username,
+                "external_id": p.external_id,
+                "tagged_sentiment": p.tagged_sentiment,
+                "posted_at": p.posted_at,
+            }
+            for p in recent_social_posts(session, symbol_id)
+        ]
+    render_recent_social_posts(social_post_rows)
 
     st.subheader("Recommendation")
     with session_scope() as session:

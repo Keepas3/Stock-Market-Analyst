@@ -17,6 +17,7 @@ two distinct signals worth showing distinctly, not one blended number.
 
 from __future__ import annotations
 
+import datetime as dt
 import hashlib
 import json
 import time
@@ -37,6 +38,12 @@ HEADERS = {"User-Agent": "Mozilla/5.0"}
 # soccer-predictor's espn_client.py RateLimiter for an undocumented source.
 CACHE_TTL_SECONDS = 3600
 
+# Sample size for fetch_recent_posts -- display-only, same "top N" idea as
+# ingest/sentiment.py's RECENT_ARTICLES_LIMIT, independent of
+# message_count (every fetched message still counts toward the aggregate
+# score via fetch_recent_messages/score_messages).
+RECENT_POSTS_LIMIT = 3
+
 _analyzer = SentimentIntensityAnalyzer()
 
 
@@ -44,6 +51,14 @@ _analyzer = SentimentIntensityAnalyzer()
 class SocialMessage:
     body: str
     tagged_sentiment: str | None  # "Bullish" | "Bearish" | None (untagged)
+    # Display-only fields, confirmed present in StockTwits' live raw
+    # response (id, user.username, created_at) but not needed by
+    # score_messages -- default to None so existing construction sites
+    # (none, as of this addition, besides fetch_recent_messages itself)
+    # don't need updating.
+    external_id: int | None = None
+    username: str | None = None
+    created_at: dt.datetime | None = None
 
 
 @dataclass
@@ -75,6 +90,20 @@ def _fetch_message_feed(ticker: str) -> list[dict]:
     return messages
 
 
+def _parse_created_at(value: str | None) -> dt.datetime | None:
+    """StockTwits timestamps look like "2026-09-30T07:22:37Z" -- parsed to
+    a naive UTC datetime, same convention as every other `fetched_at` in
+    this app (see storage/repository.py's `dt.datetime.now(dt.UTC).replace
+    (tzinfo=None)` idiom). None on any unexpected shape.
+    """
+    if not value:
+        return None
+    try:
+        return dt.datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError:
+        return None
+
+
 def fetch_recent_messages(ticker: str) -> list[SocialMessage]:
     """Empty list on any failure (network error, unknown ticker, unexpected
     shape) -- same degrade-gracefully contract as every other ingest
@@ -91,8 +120,30 @@ def fetch_recent_messages(ticker: str) -> list[SocialMessage]:
         if not body:
             continue
         sentiment_block = (entry.get("entities") or {}).get("sentiment") or {}
-        parsed.append(SocialMessage(body=body, tagged_sentiment=sentiment_block.get("basic")))
+        parsed.append(
+            SocialMessage(
+                body=body,
+                tagged_sentiment=sentiment_block.get("basic"),
+                external_id=entry.get("id"),
+                username=(entry.get("user") or {}).get("username"),
+                created_at=_parse_created_at(entry.get("created_at")),
+            )
+        )
     return parsed
+
+
+def fetch_recent_posts(ticker: str, limit: int = RECENT_POSTS_LIMIT) -> list[SocialMessage]:
+    """Newest-first sample of the same messages fetch_recent_messages
+    scores, for display (see
+    dashboard/components.py::render_recent_social_posts) -- same "let the
+    user see the real data behind one aggregated number" purpose as
+    ingest/sentiment.py::fetch_recent_articles. Messages with an
+    unparseable/missing created_at sort last, same idiom as
+    fetch_recent_articles' own published_at handling.
+    """
+    messages = fetch_recent_messages(ticker)
+    messages.sort(key=lambda m: m.created_at or dt.datetime.min, reverse=True)
+    return messages[:limit]
 
 
 def score_messages(messages: list[SocialMessage]) -> tuple[float, int] | None:

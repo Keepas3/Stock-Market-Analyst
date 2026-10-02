@@ -40,7 +40,7 @@ from stock_predictor.ingest.financials import fetch_quarterly_financials  # noqa
 from stock_predictor.ingest.fundamentals import fetch_overview  # noqa: E402
 from stock_predictor.ingest.price_history import fetch_recent_bars  # noqa: E402
 from stock_predictor.ingest.sentiment import fetch_recent_articles, fetch_sentiment  # noqa: E402
-from stock_predictor.ingest.social_sentiment import fetch_social_sentiment  # noqa: E402
+from stock_predictor.ingest.social_sentiment import fetch_recent_posts, fetch_social_sentiment  # noqa: E402
 from stock_predictor.prediction.service import predict_symbol  # noqa: E402
 from stock_predictor.prediction.training import train_symbol  # noqa: E402
 from stock_predictor.storage.db import init_db, session_scope  # noqa: E402
@@ -55,6 +55,7 @@ from stock_predictor.storage.repository import (  # noqa: E402
     replace_fundamentals_snapshot,
     replace_quarterly_financials,
     replace_recent_articles,
+    replace_recent_social_posts,
     replace_sentiment_snapshot,
     replace_social_sentiment_snapshot,
     upsert_price_bar,
@@ -220,6 +221,15 @@ def main() -> None:
                 f"  social sentiment: {social.overall_sentiment_score:+.3f} "
                 f"from {social.message_count} post(s)"
             )
+
+        posts = fetch_recent_posts(ticker)
+        with session_scope() as session:
+            replace_recent_social_posts(
+                session,
+                symbol_id,
+                [(p.body, p.username, p.external_id, p.tagged_sentiment, p.created_at) for p in posts],
+            )
+        print(f"  recent social posts: {len(posts)} stored")
 
         with session_scope() as session:
             fit = train_symbol(session, symbol_id)

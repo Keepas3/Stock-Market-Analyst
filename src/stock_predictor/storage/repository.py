@@ -22,6 +22,7 @@ from stock_predictor.storage.models import (
     RecommendationLog,
     ReturnModelParams,
     SentimentSnapshot,
+    SocialPostSnapshot,
     SocialSentimentSnapshot,
     Symbol,
 )
@@ -485,6 +486,45 @@ def latest_social_sentiment(session: Session, symbol_id: int) -> SocialSentiment
         .where(SocialSentimentSnapshot.symbol_id == symbol_id)
         .order_by(SocialSentimentSnapshot.date.desc())
         .limit(1)
+    )
+
+
+def replace_recent_social_posts(
+    session: Session,
+    symbol_id: int,
+    posts: list[tuple[str, str | None, int | None, str | None, dt.datetime | None]],
+) -> None:
+    """Fully replaces this symbol's stored "recent social posts" sample --
+    `posts` is a list of (body, username, external_id, tagged_sentiment,
+    posted_at) tuples, newest-first (see
+    ingest/social_sentiment.py::fetch_recent_posts). Same full
+    delete+insert idiom as replace_recent_articles -- these represent "the
+    current sample," not a permanent archive.
+    """
+    session.execute(delete(SocialPostSnapshot).where(SocialPostSnapshot.symbol_id == symbol_id))
+    now = dt.datetime.now(dt.UTC).replace(tzinfo=None)
+    for body, username, external_id, tagged_sentiment, posted_at in posts:
+        session.add(
+            SocialPostSnapshot(
+                symbol_id=symbol_id,
+                body=body,
+                username=username,
+                external_id=external_id,
+                tagged_sentiment=tagged_sentiment,
+                posted_at=posted_at,
+                fetched_at=now,
+            )
+        )
+
+
+def recent_social_posts(session: Session, symbol_id: int) -> list[SocialPostSnapshot]:
+    """Newest-first (NULLs -- an unparseable posted_at -- sort last)."""
+    return list(
+        session.scalars(
+            select(SocialPostSnapshot)
+            .where(SocialPostSnapshot.symbol_id == symbol_id)
+            .order_by(SocialPostSnapshot.posted_at.desc().nulls_last())
+        ).all()
     )
 
 
