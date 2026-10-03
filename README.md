@@ -1,4 +1,4 @@
-# Stock Predictor
+# Stock Market Analyst
 
 A Streamlit dashboard that tracks ~50 stocks, combining daily price
 history with news/social sentiment and fundamentals to produce a
