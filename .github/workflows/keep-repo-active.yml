@@ -1,0 +1,42 @@
+name: Keep repo active
+
+# GitHub disables scheduled workflows after 60 days with no repository
+# activity. The data-refresh/price-alert workflows normally commit
+# data/stocks.db often enough to prevent that, but if they ever go quiet
+# (market holidays, API outages, a long streak with no changes), this makes
+# an empty commit once the last one is getting old.
+
+on:
+  schedule:
+    - cron: "0 12 * * 1" # weekly, Monday 12:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+env:
+  MAX_AGE_DAYS: 50 # comfortably under GitHub's 60-day cutoff
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Commit if the last commit is getting old
+        run: |
+          last_commit_epoch=$(git log -1 --format=%ct)
+          age_days=$(( ( $(date +%s) - last_commit_epoch ) / 86400 ))
+          echo "Last commit is ${age_days} day(s) old (threshold: ${MAX_AGE_DAYS})"
+
+          if [ "$age_days" -lt "$MAX_AGE_DAYS" ]; then
+            echo "Repo is recently active -- nothing to do"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit --allow-empty -m "Keep repo active (no commits in ${age_days} days)"
+          git push

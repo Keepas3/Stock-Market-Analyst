@@ -1,22 +1,32 @@
 name: Keep Streamlit App Awake
 
+# Streamlit Community Cloud only counts a real browser session (the page's
+# JavaScript opening the app's websocket) as activity -- a bare `curl` gets
+# a 200 for the static page shell whether the app is awake or asleep, so
+# the earlier curl-based version never actually prevented sleeping. This
+# drives a headless browser instead (see scripts/keep_alive.py), which also
+# clicks "Yes, get this app back up!" if the app is already asleep.
+
 on:
   schedule:
-    - cron: "*/10 * * * *"
-  workflow_dispatch:
+    - cron: "17 */4 * * *" # every 4 hours -- well inside the inactivity window
+  workflow_dispatch: {}
 
 jobs:
-  ping:
+  visit:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - name: Ping app
-        # -c/-b (cookie jar): Streamlit Community Cloud's "waking up"
-        # interstitial sets a cookie and expects it echoed back to break
-        # out of its redirect chain -- plain `curl -L` with no cookie jar
-        # never stores it and loops until curl's 50-redirect cap trips
-        # (confirmed live: exit code 47 "Maximum (50) redirects followed").
-        # --max-redirs is a sane cap in case the loop ever recurs anyway.
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Playwright + Chromium
         run: |
-          curl -sSfL --max-time 60 --max-redirs 20 \
-            -c cookies.txt -b cookies.txt \
-            https://stock-market-analyst.streamlit.app/ -o /dev/null
+          pip install playwright
+          playwright install --with-deps chromium
+
+      - name: Visit the app
+        run: python scripts/keep_alive.py
