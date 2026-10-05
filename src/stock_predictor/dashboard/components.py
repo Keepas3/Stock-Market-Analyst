@@ -656,6 +656,7 @@ def render_financials_section(quarters: list[dict], ticker: str) -> None:
 
 
 COMPETITORS_DISPLAY_COLUMNS = (
+    "Role",
     "Ticker",
     "Name",
     "Market Cap",
@@ -689,7 +690,12 @@ def render_competitors_table(rows: list[dict], ticker: str) -> None:
     # but has no currency prefix) -- pre-formatted as a plain string here,
     # same as model/dashboard/components.py's own Financials section.
     df["Market Cap"] = df["Market Cap"].apply(_format_money)
-    styled = df.style.map(color_by_sign, subset=["Change", "% Change"])
+    styled = df.style.map(color_by_sign, subset=["Change", "% Change"]).apply(
+        lambda row: ["background-color: rgba(120, 160, 255, 0.18)"] * len(row)
+        if row["Role"] == "This company"
+        else [""] * len(row),
+        axis=1,
+    )
 
     st.subheader(f"{ticker} Competitors")
     st.dataframe(

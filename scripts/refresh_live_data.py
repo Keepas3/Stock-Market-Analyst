@@ -45,6 +45,7 @@ from stock_predictor.prediction.service import predict_symbol  # noqa: E402
 from stock_predictor.prediction.training import train_symbol  # noqa: E402
 from stock_predictor.storage.db import init_db, session_scope  # noqa: E402
 from stock_predictor.storage.repository import (  # noqa: E402
+    competitor_snapshots,
     get_or_create_symbol,
     latest_competitor_snapshot_fetch_time,
     latest_fundamentals,
@@ -175,13 +176,20 @@ def main() -> None:
                     )
                 print(f"  financials: {len(quarters)} quarter(s) stored")
 
+        competitor_tickers = competitors_for(ticker)
         with session_scope() as session:
             last_competitors_fetch = latest_competitor_snapshot_fetch_time(session, symbol_id)
+            stored_competitor_tickers = {c.competitor_ticker for c in competitor_snapshots(session, symbol_id)}
         now = dt.datetime.now(dt.UTC).replace(tzinfo=None)
+        # Also refresh early when config/competitors.yaml gained a ticker
+        # that isn't stored yet, so an edit shows up on the next run instead
+        # of waiting out the monthly cadence. (A competitor whose fetch keeps
+        # failing is simply retried each run.)
         needs_competitors_refresh = (
-            last_competitors_fetch is None or (now - last_competitors_fetch).days >= COMPETITORS_REFRESH_DAYS
+            last_competitors_fetch is None
+            or (now - last_competitors_fetch).days >= COMPETITORS_REFRESH_DAYS
+            or not set(competitor_tickers) <= stored_competitor_tickers
         )
-        competitor_tickers = competitors_for(ticker)
         if not competitor_tickers:
             print("  competitors: none configured in config/competitors.yaml")
         elif not needs_competitors_refresh:

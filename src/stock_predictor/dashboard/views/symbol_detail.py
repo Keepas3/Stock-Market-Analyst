@@ -153,6 +153,7 @@ def render() -> None:
         own_snapshot = market_snapshot(price_df)
         competitor_rows = [
             {
+                "Role": "This company",
                 "Ticker": ticker,
                 "Name": name,
                 "Market Cap": fundamentals["market_cap"] if fundamentals else None,
@@ -170,6 +171,7 @@ def render() -> None:
             # this page.
             competitor_rows.extend(
                 {
+                    "Role": "Competitor",
                     "Ticker": c.competitor_ticker,
                     "Name": c.competitor_name or c.competitor_ticker,
                     "Market Cap": c.market_cap,
