@@ -45,6 +45,19 @@ thresholds). Changes are bounded, logged, undoable, and stored in
 Streamlit Cloud secrets / `.env`: `OWNER_PASSWORD` and `ANTHROPIC_API_KEY`
 (required), `GITHUB_TOKEN` + `GITHUB_REPO` (optional, commits tuning back to
 git so it survives redeploys and applies to the alert workflows).
+
+Conversations: you can keep several chats and switch between them from the
+sidebar. They're saved in your own browser (localStorage), not on any server, so
+they survive refreshes and redeploys on that device and browser but don't follow
+you to another one. Set `ASSISTANT_CHAT_STORE=session` to turn saving off.
+
+Public examples: anyone visiting the site can open the Assistant and read the
+example conversations you've published, but only you can send messages or see
+your own chats -- trying to send prompts for `OWNER_PASSWORD`, and the page
+stays locked if that isn't set. Publish a chat from the sidebar's "Rename,
+delete or publish this chat" menu. Only its visible text is saved, into the
+public `config/showcase_chats.json` (committed with the same `GITHUB_TOKEN` as
+tuning changes), so publish only chats you're happy for anyone to read.
 ## Tests
 
 ```bash

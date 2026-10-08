@@ -12,6 +12,11 @@ If OWNER_PASSWORD isn't set (config.py::owner_password, e.g. local dev),
 `is_unlocked` always returns True and `require_owner` runs the action
 immediately -- this gate is opt-in, never a requirement just to run the
 app at all.
+
+The Assistant page (costs API credits, can change shared state) uses the
+STRICT variants instead: `is_owner` is False when no password is configured,
+and `unlock_dialog` is what a visitor sees when they try to send a message.
+Every unlock path goes through `_try_unlock`, so the lockout applies to all.
 """
 
 from __future__ import annotations
@@ -66,53 +71,62 @@ def is_unlocked() -> bool:
     return bool(st.session_state.get(_SESSION_KEY, False))
 
 
+def is_owner() -> bool:
+    """STRICT owner check: True only if an OWNER_PASSWORD is configured AND this
+    browser session entered it. Unlike `is_unlocked`, no configured password
+    means False (fails closed) -- used where access spends money or changes
+    shared state (the Assistant)."""
+    return bool(owner_password()) and bool(st.session_state.get(_SESSION_KEY, False))
+
+
+def _try_unlock(entered: str) -> str | None:
+    """The one place a password attempt is checked, shared by every dialog so
+    none of them can be used to dodge the lockout. Returns an error message to
+    show, or None on success (the session is then marked as the owner)."""
+    configured = owner_password()
+    if not configured:
+        return "No OWNER_PASSWORD is configured, so nothing can be unlocked."
+    now = time.time()
+    wait = _lockout_seconds(_FAILED_ATTEMPTS, now)
+    if wait:
+        return f"Too many incorrect attempts. Try again in about {wait} seconds."
+    if _password_matches(entered, configured):
+        st.session_state[_SESSION_KEY] = True
+        return None
+    _FAILED_ATTEMPTS.append(now)
+    del _FAILED_ATTEMPTS[:-50]
+    return "Incorrect password."
+
+
 @st.dialog("Owner password")
 def _password_dialog(on_success: Callable[[], None]) -> None:
     st.caption("Only needed to change the Watchlist or price alerts. Anyone can still browse.")
     entered = st.text_input("Password", type="password", key="owner_password_input")
     if st.button("Unlock"):
-        if _password_matches(entered, owner_password()):
-            st.session_state[_SESSION_KEY] = True
+        error = _try_unlock(entered)
+        if error is None:
             on_success()
             st.rerun()
         else:
-            st.error("Incorrect password.")
+            st.error(error)
 
 
-def require_owner_page() -> None:
-    """Hard page gate for pages that cost money or change shared state (the
-    Assistant). Unlike `require_owner` this FAILS CLOSED: with no
-    OWNER_PASSWORD configured the page stays locked rather than open, and the
-    prompt is inline (not a dismissable dialog). Returns only when this
-    browser session is unlocked; otherwise renders the gate and st.stop()s.
-    """
-    configured = owner_password()
-    if not configured:
-        st.warning(
-            "The Assistant is locked because no OWNER_PASSWORD is configured. Set OWNER_PASSWORD "
-            "(in .env locally, or in the app's secrets on Streamlit Cloud) to enable it."
-        )
-        st.stop()
-    if st.session_state.get(_SESSION_KEY, False):
+@st.dialog("Owner password")
+def unlock_dialog(on_success: Callable[[], None], reason: str) -> None:
+    """Asks for the owner password (used when a visitor tries to send an
+    Assistant message). Closing it just leaves the visitor read-only."""
+    if not owner_password():
+        st.warning("Sending messages is disabled: no OWNER_PASSWORD is configured for this app.")
         return
-
-    st.info("This page uses paid API credits, so it's limited to the app's owner.")
-    with st.form("assistant_unlock"):
-        entered = st.text_input("Owner password", type="password")
-        submitted = st.form_submit_button("Unlock")
-    if submitted:
-        now = time.time()
-        wait = _lockout_seconds(_FAILED_ATTEMPTS, now)
-        if wait:
-            st.error(f"Too many incorrect attempts. Try again in about {wait} seconds.")
-        elif _password_matches(entered, configured):
-            st.session_state[_SESSION_KEY] = True
+    st.caption(reason)
+    entered = st.text_input("Password", type="password", key="assistant_unlock_input")
+    if st.button("Unlock"):
+        error = _try_unlock(entered)
+        if error is None:
+            on_success()
             st.rerun()
         else:
-            _FAILED_ATTEMPTS.append(now)
-            del _FAILED_ATTEMPTS[:-50]
-            st.error("Incorrect password.")
-    st.stop()
+            st.error(error)
 
 
 def require_owner(on_success: Callable[[], None]) -> bool:

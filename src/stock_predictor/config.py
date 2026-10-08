@@ -86,6 +86,14 @@ def assistant_model() -> str:
     return os.environ.get("ASSISTANT_MODEL") or "claude-opus-5-5"
 
 
+def assistant_chat_store() -> str:
+    """Where Assistant conversations persist: "browser" (the owner's own
+    localStorage, the default) or "session" (not at all). A hosted database
+    would be a third value -- see assistant/conversations.py::ConversationStore.
+    """
+    return (os.environ.get("ASSISTANT_CHAT_STORE") or "browser").strip().lower()
+
+
 def github_token() -> str | None:
     """A fine-grained token with Contents: read/write on this one repo --
     lets the Assistant commit config/model_overrides.yaml back to git (see

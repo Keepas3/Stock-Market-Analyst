@@ -12,6 +12,7 @@ SyncResult the UI shows, with the entries kept so the owner can retry.
 from __future__ import annotations
 
 import base64
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import requests
@@ -49,13 +50,15 @@ def _commit_message(entries: list[dict]) -> str:
     return f"AI tuning: {len(entries)} change(s) to {', '.join(tickers)}"[:100]
 
 
-def commit_entries(entries: list[dict]) -> SyncResult:
-    if not entries:
-        return SyncResult(True, "Nothing to save.")
+def commit_file(file_path: str, transform: Callable[[str], str], message: str) -> SyncResult:
+    """Commit one repo file through the Contents API. `transform` receives the
+    file's CURRENT text on GitHub ("" if it doesn't exist yet) and returns the
+    new text -- so a change is always replayed onto the remote version, never a
+    stale local copy. `message` must be built from structured fields only."""
     if not is_configured():
         return SyncResult(False, "Applied locally only: GITHUB_TOKEN and GITHUB_REPO aren't configured.")
 
-    url = f"{API_ROOT}/repos/{config.github_repo()}/contents/{FILE_PATH}"
+    url = f"{API_ROOT}/repos/{config.github_repo()}/contents/{file_path}"
     branch = config.github_branch()
     last_error = "unknown error"
     for _ in range(_MAX_ATTEMPTS):
@@ -69,11 +72,9 @@ def commit_entries(entries: list[dict]) -> SyncResult:
                 sha = body["sha"]
                 remote_text = base64.b64decode(body["content"]).decode("utf-8")
 
-            store = overrides_store.parse_store(remote_text)
-            overrides_store.apply_entries(store, entries)
             payload = {
-                "message": _commit_message(entries),
-                "content": base64.b64encode(overrides_store.dump_store(store).encode("utf-8")).decode("ascii"),
+                "message": message[:100],
+                "content": base64.b64encode(transform(remote_text).encode("utf-8")).decode("ascii"),
                 "branch": branch,
             }
             if sha:
@@ -90,3 +91,15 @@ def commit_entries(entries: list[dict]) -> SyncResult:
             if isinstance(exc, requests.RequestException):
                 break
     return SyncResult(False, f"Applied locally, but not saved to git: {last_error}")
+
+
+def commit_entries(entries: list[dict]) -> SyncResult:
+    if not entries:
+        return SyncResult(True, "Nothing to save.")
+
+    def replay(remote_text: str) -> str:
+        store = overrides_store.parse_store(remote_text)
+        overrides_store.apply_entries(store, entries)
+        return overrides_store.dump_store(store)
+
+    return commit_file(FILE_PATH, replay, _commit_message(entries))
