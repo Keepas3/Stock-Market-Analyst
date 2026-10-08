@@ -41,4 +41,4 @@ def test_format_money_nan_is_na():
 def test_competitors_display_columns_includes_market_cap_and_pe():
     assert "Market Cap" in COMPETITORS_DISPLAY_COLUMNS
     assert "P/E" in COMPETITORS_DISPLAY_COLUMNS
-    assert COMPETITORS_DISPLAY_COLUMNS[0] == "Ticker"
+    assert COMPETITORS_DISPLAY_COLUMNS[:2] == ("Role", "Ticker")

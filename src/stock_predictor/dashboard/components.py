@@ -11,8 +11,17 @@ import plotly.graph_objects as go
 import streamlit as st
 from sqlalchemy.orm import Session
 
+from stock_predictor.model import overrides_store
 from stock_predictor.model.sentiment_adjustment import SENTIMENT_IMPACT_CAP
-from stock_predictor.model.technical_score import BUY_VOTE_THRESHOLD, CompositeSignal, SELL_VOTE_THRESHOLD
+from stock_predictor.model.technical_indicators import PE_EXPENSIVE_THRESHOLD, PE_VALUE_THRESHOLD
+from stock_predictor.model.technical_score import (
+    BUY_VOTE_THRESHOLD,
+    SELL_VOTE_THRESHOLD,
+    SENTIMENT_VOTE_BEARISH,
+    SENTIMENT_VOTE_BULLISH,
+    CompositeSignal,
+)
+from stock_predictor.model.tuning import resolve_params
 from stock_predictor.prediction.service import predict_symbol
 from stock_predictor.storage.models import Symbol
 from stock_predictor.storage.repository import (
@@ -46,33 +55,57 @@ WATCHLIST_DISPLAY_COLUMNS = (
 # why the actual add/remove control is a button pair, not this column.
 SYMBOL_TABLE_DISPLAY_COLUMNS = WATCHLIST_DISPLAY_COLUMNS + ("Watchlist",)
 
-# render_symbol_table's row height cap -- about a dozen rows visible
-# (35px/row + header) before the grid's own scrollbar takes over, so the
-# page below it (the Add/Remove Watchlist and View buttons for whatever
-# row is selected) stays reachable without a long scroll on a large
-# watchlist. See render_symbol_table's own comment for why.
-MAX_TABLE_HEIGHT = 440
+# Safety ceiling on render_symbol_table's height. The table normally grows to
+# show every row (the page scrolls, not the grid); this only guards against a
+# pathological row count producing an unusably tall canvas.
+MAX_TABLE_HEIGHT = 4000
+
+# Key of the container holding a selected row's actions (Add/Remove Watchlist,
+# View detail). The page renders it ABOVE the table and fills it after the
+# table reports a selection; SELECTION_BAR_CSS pins it to the top of the
+# viewport so it's always visible however far down the full-length table the
+# selected row is.
+SELECTION_BAR_KEY = "symbol_actions"
+# Sticky has to go on Streamlit's layout WRAPPER around the keyed container, not
+# the container itself: the wrapper is exactly as tall as the bar, so a sticky
+# child has no room to move inside it, while the wrapper's parent spans the
+# whole page. top clears Streamlit's 3.75rem fixed header.
+SELECTION_BAR_CSS = f"""
+<style>
+[data-testid="stLayoutWrapper"]:has(> .st-key-{SELECTION_BAR_KEY}) {{
+    position: sticky;
+    top: 3.75rem;
+    z-index: 999;
+    padding: 0.6rem 0.25rem;
+    background-color: #0e1117;
+    border-bottom: 1px solid rgba(128, 128, 128, 0.35);
+}}
+@media (prefers-color-scheme: light) {{
+    [data-testid="stLayoutWrapper"]:has(> .st-key-{SELECTION_BAR_KEY}) {{ background-color: #ffffff; }}
+}}
+</style>
+"""
 
 _MA_SIGNAL_LABELS = {1: "Golden Cross", -1: "Death Cross", 0: "Neutral"}
 
 # Bands for turning a raw -1..+1 sentiment score (news or social) into plain
-# English. Wider than technical_score.py's own +1/0/-1 vote banding
-# (SENTIMENT_VOTE_BULLISH/BEARISH = +-0.15) -- that's a coarser signal for
-# the composite vote math, this is just display wording -- but "neutral"
-# still lines up with the same +-0.15 no-vote zone so the label never
-# contradicts the vote shown in "Show the math".
-def sentiment_label(score: float) -> str:
-    if score >= 0.5:
+# English. Finer than the composite's +1/0/-1 vote banding -- that's a
+# coarser signal for the vote math, this is just display wording -- but
+# "positive" starts at the vote cutoff (+-0.15 by default, tunable per
+# company via model/tuning.py) so the label never contradicts the vote shown
+# in "Show the math".
+def sentiment_label(score: float, cutoff: float = 0.15) -> str:
+    if score >= max(0.5, cutoff):
         return "very positive"
-    if score >= 0.15:
+    if score >= cutoff:
         return "mostly positive"
-    if score >= 0.05:
+    if score >= min(0.05, cutoff):
         return "slightly positive"
-    if score > -0.05:
+    if score > -min(0.05, cutoff):
         return "neutral"
-    if score > -0.15:
+    if score > -cutoff:
         return "slightly negative"
-    if score > -0.5:
+    if score > -max(0.5, cutoff):
         return "mostly negative"
     return "very negative"
 
@@ -146,15 +179,18 @@ def watchlist_dataframe(session: Session, symbols: list[Symbol] | None = None) -
     add/remove buttons.
 
     "Recommendation" (Buy/Hold/Sell) is prediction.composite.recommendation
-    (see model/technical_score.py) -- an equal-weighted vote across the MA
+    (see model/technical_score.py) -- a weighted vote (equal by default,
+    tunable per company, see model/tuning.py) across the MA
     signal, P/E, news sentiment, and social sentiment columns shown right
     next to it, not a separate opaque signal. Not financial advice --
     worth repeating wherever this column is actually shown in the UI, not
     just in code.
     """
     rows = []
+    # One YAML read per render (cached by mtime), not one per symbol.
+    all_overrides = overrides_store.all_overrides()
     for symbol in symbols if symbols is not None else all_symbols(session):
-        prediction = predict_symbol(session, symbol.id)
+        prediction = predict_symbol(session, symbol.id, resolve_params(all_overrides.get(symbol.ticker)))
         composite = prediction.composite if prediction else None
         fundamentals = latest_fundamentals(session, symbol.id)
         sentiment_row = latest_sentiment(session, symbol.id)
@@ -178,26 +214,99 @@ def watchlist_dataframe(session: Session, symbols: list[Symbol] | None = None) -
     return pd.DataFrame(rows)
 
 
+# Hover tooltips (column_config `help`) on the columns that aren't
+# self-explanatory, i.e. everything after Volume. st.dataframe shows `help`
+# only as a hover popup with no visible cue that one exists, so each of these
+# columns' header label also gets a trailing "ⓘ" (the column KEY stays the
+# plain name so column_order and the data are unaffected). The numbers in the
+# text are formatted from the model constants so it can't drift from what the
+# math actually does by default (per-company tuning can override them).
+INFO_MARK = " ⓘ"
+
 _SYMBOL_TABLE_COLUMN_CONFIG = {
     "Price": st.column_config.NumberColumn(format="dollar"),
     "Change": st.column_config.NumberColumn(format="dollar"),
     "% Change": st.column_config.NumberColumn(format="percent"),
     "Volume": st.column_config.NumberColumn(format="compact"),
-    "52W Low": st.column_config.NumberColumn(format="dollar"),
-    "52W High": st.column_config.NumberColumn(format="dollar"),
+    "52W Low": st.column_config.NumberColumn(
+        label="52W Low" + INFO_MARK,
+        format="dollar",
+        help="Lowest price over the past 52 weeks (a trailing year of daily data).",
+    ),
+    "52W High": st.column_config.NumberColumn(
+        label="52W High" + INFO_MARK,
+        format="dollar",
+        help="Highest price over the past 52 weeks (a trailing year of daily data).",
+    ),
+    "MA Signal": st.column_config.TextColumn(
+        label="MA Signal" + INFO_MARK,
+        help=(
+            "Moving-average crossover. Golden Cross: the 50-day average price is above the 200-day "
+            "average (a bullish trend signal). Death Cross: the 50-day is below the 200-day (bearish). "
+            "Neutral: not enough price history yet."
+        ),
+    ),
     # Unformatted, this rendered raw floats to 6 decimal places
     # (e.g. "39.080000") -- same %.2fx style as the Competitors table's own
     # P/E column.
-    "P/E": st.column_config.NumberColumn(format="%.2fx"),
-    "News Sentiment": st.column_config.NumberColumn(format="%+.3f"),
-    "Social Sentiment": st.column_config.NumberColumn(format="%+.3f"),
+    "P/E": st.column_config.NumberColumn(
+        label="P/E" + INFO_MARK,
+        format="%.2fx",
+        help=(
+            "Price-to-earnings ratio: the share price divided by the company's yearly earnings per "
+            f"share. Lower can mean cheaper relative to profits. By default under {PE_VALUE_THRESHOLD:g} "
+            f"counts as cheap (bullish) and over {PE_EXPENSIVE_THRESHOLD:g} as expensive (bearish). "
+            "Blank if unavailable or the company isn't profitable."
+        ),
+    ),
+    "News Sentiment": st.column_config.NumberColumn(
+        label="News Sentiment" + INFO_MARK,
+        format="%+.3f",
+        help=(
+            "Average tone of recent news headlines, from -1 (very negative) to +1 (very positive). "
+            f"By default +{SENTIMENT_VOTE_BULLISH:g} or higher counts as bullish and "
+            f"{SENTIMENT_VOTE_BEARISH:g} or lower as bearish."
+        ),
+    ),
+    "Social Sentiment": st.column_config.NumberColumn(
+        label="Social Sentiment" + INFO_MARK,
+        format="%+.3f",
+        help=(
+            "Average tone of recent StockTwits posts, from -1 (very negative) to +1 (very positive). "
+            f"Same default cutoffs as news: +{SENTIMENT_VOTE_BULLISH:g} bullish, "
+            f"{SENTIMENT_VOTE_BEARISH:g} bearish."
+        ),
+    ),
+    "Recommendation": st.column_config.TextColumn(
+        label="Recommendation" + INFO_MARK,
+        help=(
+            "Buy / Hold / Sell from a weighted vote of the MA Signal, P/E, News Sentiment and Social "
+            f"Sentiment columns (each votes +1, 0 or -1). By default Buy at +{BUY_VOTE_THRESHOLD:g} or "
+            f"more, Sell at {SELL_VOTE_THRESHOLD:g} or less, otherwise Hold. A simple heuristic, not "
+            "financial advice."
+        ),
+    ),
     # A plain (non-editable) checkmark -- st.dataframe never lets you edit
     # a cell, so this is purely a "already on your Watchlist?" indicator;
     # the button pair render_symbol_table's caller shows for the selected
     # row is the actual add/remove control (see that function's docstring
     # for why a data_editor + inline checkbox isn't used).
-    "Watchlist": st.column_config.CheckboxColumn(help="Already on your personal Watchlist"),
+    "Watchlist": st.column_config.CheckboxColumn(
+        label="Watchlist" + INFO_MARK,
+        help="Already on your personal Watchlist",
+    ),
 }
+
+
+def selection_bar() -> st.delta_generator.DeltaGenerator:
+    """Call BEFORE render_symbol_table to reserve the sticky slot above the
+    table; fill it afterward with whatever the selected row needs. Streamlit
+    renders in call order, but a container created first can be written to
+    later -- that's what lets the bar sit above a table whose selection
+    result isn't known until the table has rendered.
+    """
+    st.markdown(SELECTION_BAR_CSS, unsafe_allow_html=True)
+    return st.container(key=SELECTION_BAR_KEY)
 
 
 def render_symbol_table(df: pd.DataFrame, key: str) -> dict | None:
@@ -213,18 +322,17 @@ def render_symbol_table(df: pd.DataFrame, key: str) -> dict | None:
     force same-tab via st.column_config.LinkColumn's public API). This
     keeps the original click-to-select, same-tab-navigation experience;
     the caller renders explicit "Add/Remove Watchlist" and "View detail"
-    buttons for whatever row is selected (see dashboard/views/main.py).
+    buttons for whatever row is selected, in a sticky bar ABOVE the table
+    (see render_selection_bar and dashboard/views/main.py).
     """
     if df.empty:
         return None
 
-    # Capped, not "35 * (len(df) + 1)" grown to fit every row -- with ~50
-    # tracked symbols that used to make the table (and everything below
-    # it, including the Add/Remove Watchlist and View buttons) over 1800px
-    # tall, so selecting a company meant scrolling well past the table to
-    # find them. Capping gives the grid its own internal scrollbar instead
-    # -- the buttons for whatever row you've selected stay one short
-    # scroll (or none) below the table regardless of watchlist size.
+    # Grown to show EVERY row, so the table uses the page's own scroll instead
+    # of a small grid with its own scrollbar. This used to be capped at
+    # ~440px because the Add/Remove and View buttons rendered BELOW the table
+    # and had to stay reachable; they now live in a sticky bar above it (see
+    # SELECTION_BAR_CSS), so nothing needs to fit around the table anymore.
     height = min(35 * (len(df) + 1) + 3, MAX_TABLE_HEIGHT)
 
     event = st.dataframe(
@@ -340,7 +448,8 @@ def render_prediction_breakdown(prediction, ticker: str) -> None:
         st.write(
             f"Today's news sentiment (score **{b.sentiment_score:+.3f}**, roughly -1=bearish to "
             f"+1=bullish) nudges the daily mean return: {b.base_mean_return:+.5f} → "
-            f"**{b.adjusted_mean_return:+.5f}** (capped at ±{SENTIMENT_IMPACT_CAP:.3f} absolute -- "
+            f"**{b.adjusted_mean_return:+.5f}** (capped at ±"
+            f"{(b.impact_cap if b.impact_cap is not None else SENTIMENT_IMPACT_CAP):.4f} absolute -- "
             "a deliberately small, speculative nudge, not a validated signal; see "
             "model/sentiment_adjustment.py)."
         )
@@ -407,12 +516,15 @@ def _composite_tldr(signal: CompositeSignal) -> str:
     explained rather than cherry-picked.
     """
     clauses = [
-        f"{_FACTOR_LABELS[key]} {_VOTE_PHRASES[key][vote]}"
-        for key, vote in (
-            ("ma_vote", signal.ma_vote),
-            ("pe_vote", signal.pe_vote),
-            ("news_vote", signal.news_vote),
-            ("social_vote", signal.social_vote),
+        f"{_FACTOR_LABELS[key]} {_VOTE_PHRASES[key][vote]}" + (" (weighted to zero, not counted)" if weight == 0 else "")
+        for (key, vote), weight in zip(
+            (
+                ("ma_vote", signal.ma_vote),
+                ("pe_vote", signal.pe_vote),
+                ("news_vote", signal.news_vote),
+                ("social_vote", signal.social_vote),
+            ),
+            signal.weights,
         )
     ]
     return f"{_VERDICT_PHRASES[signal.recommendation]}: {_humanize_list(clauses)}."
@@ -427,17 +539,30 @@ def render_composite_breakdown(signal: CompositeSignal) -> None:
     raw +1/0/-1 numbers in the reader's face up front).
     """
     st.markdown(f"**Recommendation: {signal.recommendation}**")
+    if signal.overridden:
+        st.caption(
+            "AI-adjusted for this company: "
+            + ", ".join(f"{name} = {value:g}" for name, value in signal.overridden.items())
+            + ". Manage these on the Assistant page."
+        )
     st.write(_composite_tldr(signal))
     with st.expander("Show the math", expanded=False):
+        ma_w, pe_w, news_w, social_w = signal.weights
+        weighted = any(w != 1 for w in signal.weights)
         st.write(
-            f"MA signal: **{signal.ma_vote:+d}** · P/E: **{signal.pe_vote:+d}** · "
-            f"News sentiment: **{signal.news_vote:+d}** · Social sentiment: **{signal.social_vote:+d}** "
-            f"→ total **{signal.total:+d}**"
+            f"MA signal: **{signal.ma_vote:+d}**" + (f" x{ma_w:g}" if weighted else "")
+            + f" · P/E: **{signal.pe_vote:+d}**" + (f" x{pe_w:g}" if weighted else "")
+            + f" · News sentiment: **{signal.news_vote:+d}**" + (f" x{news_w:g}" if weighted else "")
+            + f" · Social sentiment: **{signal.social_vote:+d}**" + (f" x{social_w:g}" if weighted else "")
+            + f" → total **{signal.total:+g}**"
         )
         st.caption(
-            "Each signal casts one vote (+1 bullish, -1 bearish, 0 neutral/no data yet). Buy needs a "
-            f"total of +{BUY_VOTE_THRESHOLD} or higher, Sell needs {SELL_VOTE_THRESHOLD} or lower, "
-            "otherwise Hold -- a simple, equal-weighted, non-backtested heuristic, not financial advice."
+            "Each signal casts one vote (+1 bullish, -1 bearish, 0 neutral/no data yet)"
+            + (", scaled by the weight shown" if weighted else "")
+            + f". Buy needs a total of {signal.buy_threshold:+g} or higher, Sell needs "
+            f"{signal.sell_threshold:+g} or lower, otherwise Hold -- a simple, "
+            + ("custom-weighted" if weighted else "equal-weighted")
+            + ", non-backtested heuristic, not financial advice."
         )
 
 

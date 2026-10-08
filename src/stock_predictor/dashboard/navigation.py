@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from stock_predictor.dashboard.views import main, symbol_detail, watchlist
+from stock_predictor.dashboard.views import assistant, main, symbol_detail, watchlist
 
 
 def main_page() -> st.Page:
@@ -15,6 +15,10 @@ def main_page() -> st.Page:
 
 def watchlist_page() -> st.Page:
     return st.Page(watchlist.render, title="Watchlist", icon=":material/star:", url_path="watchlist")
+
+
+def assistant_page() -> st.Page:
+    return st.Page(assistant.render, title="Assistant", icon=":material/smart_toy:", url_path="assistant")
 
 
 def symbol_detail_page() -> st.Page:

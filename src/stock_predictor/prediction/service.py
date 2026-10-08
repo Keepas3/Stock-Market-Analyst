@@ -11,10 +11,13 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
+from stock_predictor.model import overrides_store
 from stock_predictor.model.markets import PredictionBreakdown, StockPrediction, predict_markets
 from stock_predictor.model.sentiment_adjustment import adjust_for_sentiment
 from stock_predictor.model.technical_indicators import compute_moving_averages, ma_signal, pe_signal
 from stock_predictor.model.technical_score import compute_recommendation, sentiment_vote
+from stock_predictor.model.tuning import TunableParams
+from stock_predictor.storage.models import Symbol
 from stock_predictor.storage.repository import (
     latest_fundamentals,
     latest_return_model_params,
@@ -26,20 +29,31 @@ from stock_predictor.storage.repository import (
 HORIZON_DAYS = 5
 
 
-def predict_symbol(session: Session, symbol_id: int) -> StockPrediction | None:
+def predict_symbol(
+    session: Session, symbol_id: int, tuning: TunableParams | None = None
+) -> StockPrediction | None:
     """None if this symbol has no trained return model yet (see
     prediction.training.train_symbol) -- same "nothing to show yet"
     contract as soccer-predictor's own predict_fixture callers already
     handle (load_latest_params returning None).
+
+    `tuning` is this company's effective math parameters (model/tuning.py).
+    Omitted, it's resolved from config/model_overrides.yaml for this
+    symbol's ticker; callers that loop over many symbols can resolve once
+    per render and pass it in.
     """
     params = latest_return_model_params(session, symbol_id)
     if params is None:
         return None
 
+    if tuning is None:
+        symbol = session.get(Symbol, symbol_id)
+        tuning = overrides_store.params_for(symbol.ticker) if symbol is not None else TunableParams()
+
     sentiment_row = latest_sentiment(session, symbol_id)
     sentiment_score = sentiment_row.overall_sentiment_score if sentiment_row is not None else None
 
-    adjusted_daily_mean = adjust_for_sentiment(params.mu, sentiment_score)
+    adjusted_daily_mean = adjust_for_sentiment(params.mu, sentiment_score, tuning.sentiment_impact_cap)
 
     horizon_mean = adjusted_daily_mean * HORIZON_DAYS
     horizon_sigma = params.sigma * (HORIZON_DAYS**0.5)
@@ -55,6 +69,7 @@ def predict_symbol(session: Session, symbol_id: int) -> StockPrediction | None:
         xi=params.xi,
         n_bars=params.n_bars,
         fitted_at=params.fitted_at.isoformat(),
+        impact_cap=tuning.sentiment_impact_cap,
     )
 
     price_df = price_bars_for_symbol(session, symbol_id)
@@ -63,13 +78,25 @@ def predict_symbol(session: Session, symbol_id: int) -> StockPrediction | None:
 
     fundamentals_row = latest_fundamentals(session, symbol_id)
     pe_ratio = fundamentals_row.pe_ratio if fundamentals_row is not None else None
-    pe_vote = pe_signal(pe_ratio)
+    pe_vote = pe_signal(pe_ratio, tuning.pe_value_threshold, tuning.pe_expensive_threshold)
 
-    news_vote = sentiment_vote(sentiment_score)
+    news_cutoff = tuning.news_sentiment_cutoff
+    news_vote = sentiment_vote(sentiment_score, news_cutoff, -news_cutoff)
 
     social_row = latest_social_sentiment(session, symbol_id)
     social_score = social_row.overall_sentiment_score if social_row is not None else None
-    social_vote = sentiment_vote(social_score)
+    social_cutoff = tuning.social_sentiment_cutoff
+    social_vote = sentiment_vote(social_score, social_cutoff, -social_cutoff)
 
-    prediction.composite = compute_recommendation(ma_vote, pe_vote, news_vote, social_vote)
+    composite = compute_recommendation(
+        ma_vote,
+        pe_vote,
+        news_vote,
+        social_vote,
+        weights=tuning.weights,
+        buy_threshold=tuning.buy_threshold,
+        sell_threshold=tuning.sell_threshold,
+    )
+    composite.overridden = tuning.overridden()
+    prediction.composite = composite
     return prediction

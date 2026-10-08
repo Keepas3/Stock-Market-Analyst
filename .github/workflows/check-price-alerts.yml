@@ -42,7 +42,16 @@ jobs:
           if ! git diff --quiet -- data/stocks.db; then
             git add data/stocks.db
             git commit -m "Update price alert state"
-            git push
+            for attempt in 1 2 3; do
+              if git push; then
+                exit 0
+              fi
+              # main moved (the other cron or an override commit) -- replay our commit on top.
+              # In a rebase, -X theirs keeps OUR replayed commit's version of the binary DB.
+              git pull --rebase -X theirs origin main || { git rebase --abort || true; exit 1; }
+            done
+            echo "Could not push after 3 attempts" >&2
+            exit 1
           else
             echo "No changes to data/stocks.db -- nothing to commit"
           fi

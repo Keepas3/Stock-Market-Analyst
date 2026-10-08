@@ -547,6 +547,18 @@ def latest_recommendation_log(session: Session, symbol_id: int) -> Recommendatio
     )
 
 
+def recommendation_history(session: Session, symbol_id: int, limit: int = 10) -> list[RecommendationLog]:
+    """Most recent first."""
+    return list(
+        session.scalars(
+            select(RecommendationLog)
+            .where(RecommendationLog.symbol_id == symbol_id)
+            .order_by(RecommendationLog.recorded_at.desc())
+            .limit(limit)
+        ).all()
+    )
+
+
 def save_return_model_params(
     session: Session, symbol_id: int, mu: float, sigma: float, dof: float, xi: float, n_bars: int
 ) -> ReturnModelParams:

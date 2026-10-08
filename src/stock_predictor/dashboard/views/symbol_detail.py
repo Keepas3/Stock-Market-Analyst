@@ -22,6 +22,7 @@ from stock_predictor.dashboard.components import (
     render_recent_social_posts,
     sentiment_label,
 )
+from stock_predictor.model import overrides_store
 from stock_predictor.prediction.service import predict_symbol
 from stock_predictor.storage.db import session_scope
 from stock_predictor.storage.repository import (
@@ -72,6 +73,7 @@ def render() -> None:
 
     st.title(ticker)
     st.caption(name + (f" · {sector}" if sector else ""))
+    tuning = overrides_store.params_for(ticker)
 
     with session_scope() as session:
         fundamentals_row = latest_fundamentals(session, symbol_id)
@@ -240,7 +242,7 @@ def render() -> None:
         st.caption("No social sentiment reading available yet -- this updates daily.")
     else:
         st.write(
-            f"Social media views this company as **{sentiment_label(social_score)}** "
+            f"Social media views this company as **{sentiment_label(social_score, tuning.social_sentiment_cutoff)}** "
             f"({social_score:+.3f}, roughly -1=bearish to +1=bullish), "
             f"from {social_count} recent post(s) on {social_date}."
         )
@@ -262,7 +264,7 @@ def render() -> None:
 
     st.subheader("Recommendation")
     with session_scope() as session:
-        prediction = predict_symbol(session, symbol_id)
+        prediction = predict_symbol(session, symbol_id, tuning)
     if prediction is None or prediction.composite is None:
         st.warning("No prediction available for this symbol yet.")
     else:

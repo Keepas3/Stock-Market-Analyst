@@ -30,7 +30,7 @@ def test_send_webhook_alert_posts_the_message_to_the_configured_url(monkeypatch)
 
     assert result is True
     assert captured["url"] == "https://discord.example/webhook"
-    assert captured["json"] == {"content": "AAPL: Hold -> Buy"}
+    assert captured["json"] == {"content": "AAPL: Hold -> Buy", "allowed_mentions": {"parse": []}}
 
 
 def test_send_webhook_alert_returns_false_on_request_exception(monkeypatch):

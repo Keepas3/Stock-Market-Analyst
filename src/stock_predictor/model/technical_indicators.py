@@ -46,15 +46,20 @@ def ma_signal(sma_short: float | None, sma_long: float | None) -> int:
     return 0
 
 
-def pe_signal(pe_ratio: float | None) -> int:
-    """+1 below PE_VALUE_THRESHOLD, -1 above PE_EXPENSIVE_THRESHOLD, 0
+def pe_signal(
+    pe_ratio: float | None,
+    value_threshold: float = PE_VALUE_THRESHOLD,
+    expensive_threshold: float = PE_EXPENSIVE_THRESHOLD,
+) -> int:
+    """+1 below `value_threshold`, -1 above `expensive_threshold`, 0
     between them or if `pe_ratio` is None/non-positive (a loss-making
-    company's negative P/E isn't a "cheap" signal).
+    company's negative P/E isn't a "cheap" signal). Thresholds default to
+    the module constants; model/tuning.py supplies per-company overrides.
     """
     if pe_ratio is None or pe_ratio <= 0:
         return 0
-    if pe_ratio < PE_VALUE_THRESHOLD:
+    if pe_ratio < value_threshold:
         return 1
-    if pe_ratio > PE_EXPENSIVE_THRESHOLD:
+    if pe_ratio > expensive_threshold:
         return -1
     return 0

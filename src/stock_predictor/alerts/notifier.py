@@ -41,7 +41,11 @@ def send_webhook_alert(message: str) -> bool:
     if not url:
         return False
     try:
-        response = requests.post(url, json={"content": message}, timeout=15)
+        # allowed_mentions.parse=[] -- never ping @everyone/@here/roles even if
+        # text from a tuning note or ticker field contained one.
+        response = requests.post(
+            url, json={"content": message, "allowed_mentions": {"parse": []}}, timeout=15
+        )
         response.raise_for_status()
     except requests.RequestException:
         return False

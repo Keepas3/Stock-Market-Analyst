@@ -5,6 +5,7 @@ description = "Stock price/sentiment predictor -- ported architecture from socce
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
+    "anthropic>=1.11.0",
     "numpy>=2.5.3",
     "pandas>=3.0.6",
     "plotly>=7.1.0",

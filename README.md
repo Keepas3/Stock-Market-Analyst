@@ -33,6 +33,18 @@ To check price alerts locally: `uv run python scripts/check_price_alerts.py`.
 - `FINNHUB_API_KEY`
 - `DISCORD_WEBHOOK_URL` -- needed for both the recommendation-change and
   price-threshold alerts to actually fire
+
+## Assistant page
+
+A chat tab (owner-only) powered by the Claude API. It answers questions about
+the tracked companies using the app's own data and can tune each company's
+recommendation math (P/E bands, sentiment cutoffs, vote weights, Buy/Sell
+thresholds). Changes are bounded, logged, undoable, and stored in
+`config/model_overrides.yaml`.
+
+Streamlit Cloud secrets / `.env`: `OWNER_PASSWORD` and `ANTHROPIC_API_KEY`
+(required), `GITHUB_TOKEN` + `GITHUB_REPO` (optional, commits tuning back to
+git so it survives redeploys and applies to the alert workflows).
 ## Tests
 
 ```bash

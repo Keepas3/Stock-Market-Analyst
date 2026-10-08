@@ -10,7 +10,7 @@ docstring for the pattern).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 # Same +1/0/-1 banding idea model/technical_indicators.py's pe_signal
 # already uses, just for a roughly -1..+1 sentiment score instead of a P/E
@@ -32,8 +32,16 @@ class CompositeSignal:
     pe_vote: int
     news_vote: int
     social_vote: int
-    total: int
+    total: float  # weighted vote sum (== the plain integer sum when every weight is 1)
     recommendation: str  # "Buy" | "Hold" | "Sell"
+    # The weights/thresholds this verdict was actually computed with, and
+    # which of the tunable params differ from their defaults -- so the UI
+    # can show the real thresholds and an "AI-adjusted" badge without a
+    # second lookup (see model/tuning.py).
+    weights: tuple[float, float, float, float] = (1.0, 1.0, 1.0, 1.0)
+    buy_threshold: float = BUY_VOTE_THRESHOLD
+    sell_threshold: float = SELL_VOTE_THRESHOLD
+    overridden: dict[str, float] = field(default_factory=dict)
 
 
 def sentiment_vote(
@@ -55,11 +63,22 @@ def sentiment_vote(
     return 0
 
 
-def compute_recommendation(ma_vote: int, pe_vote: int, news_vote: int, social_vote: int) -> CompositeSignal:
-    total = ma_vote + pe_vote + news_vote + social_vote
-    if total >= BUY_VOTE_THRESHOLD:
+def compute_recommendation(
+    ma_vote: int,
+    pe_vote: int,
+    news_vote: int,
+    social_vote: int,
+    weights: tuple[float, float, float, float] = (1.0, 1.0, 1.0, 1.0),
+    buy_threshold: float = BUY_VOTE_THRESHOLD,
+    sell_threshold: float = SELL_VOTE_THRESHOLD,
+) -> CompositeSignal:
+    votes = (ma_vote, pe_vote, news_vote, social_vote)
+    # Rounded: weights move in 0.25 steps (see model/tuning.py), so a sum
+    # like 0.75+0.75+0.5 must land exactly on a threshold, not 1.9999999.
+    total = round(sum(vote * weight for vote, weight in zip(votes, weights)), 4)
+    if total >= buy_threshold:
         recommendation = "Buy"
-    elif total <= SELL_VOTE_THRESHOLD:
+    elif total <= sell_threshold:
         recommendation = "Sell"
     else:
         recommendation = "Hold"
@@ -70,4 +89,7 @@ def compute_recommendation(ma_vote: int, pe_vote: int, news_vote: int, social_vo
         social_vote=social_vote,
         total=total,
         recommendation=recommendation,
+        weights=weights,
+        buy_threshold=buy_threshold,
+        sell_threshold=sell_threshold,
     )

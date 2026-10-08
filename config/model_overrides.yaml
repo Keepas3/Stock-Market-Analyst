@@ -1,0 +1,5 @@
+# Per-company overrides of the recommendation math (see src/stock_predictor/model/tuning.py
+# for every parameter, default and bound). Written by the Assistant page and safe to edit by hand.
+# Removing a line restores that default.
+overrides: {}
+history: []

@@ -75,6 +75,34 @@ def discord_webhook_url() -> str | None:
     return os.environ.get("DISCORD_WEBHOOK_URL") or None
 
 
+def anthropic_api_key() -> str | None:
+    """Powers the Assistant page (dashboard/views/assistant.py). Unset means
+    that page shows a setup message instead of a chat box.
+    """
+    return os.environ.get("ANTHROPIC_API_KEY") or None
+
+
+def assistant_model() -> str:
+    return os.environ.get("ASSISTANT_MODEL") or "claude-opus-5-5"
+
+
+def github_token() -> str | None:
+    """A fine-grained token with Contents: read/write on this one repo --
+    lets the Assistant commit config/model_overrides.yaml back to git (see
+    model/overrides_sync.py). Unset means changes only apply locally.
+    """
+    return os.environ.get("GITHUB_TOKEN") or None
+
+
+def github_repo() -> str | None:
+    """"owner/name", e.g. "Keepas3/Stock-Market-Analyst"."""
+    return os.environ.get("GITHUB_REPO") or None
+
+
+def github_branch() -> str:
+    return os.environ.get("GITHUB_BRANCH") or "main"
+
+
 def owner_password() -> str | None:
     """Gates write actions (Add/Remove Watchlist, Save price alert) on the
     dashboard -- see dashboard/auth.py. This app has no real user

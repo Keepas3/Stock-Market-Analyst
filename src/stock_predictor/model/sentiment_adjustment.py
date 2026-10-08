@@ -24,12 +24,15 @@ from __future__ import annotations
 SENTIMENT_IMPACT_CAP = 0.001
 
 
-def adjust_for_sentiment(base_mean_return: float, sentiment_score: float | None) -> float:
+def adjust_for_sentiment(
+    base_mean_return: float, sentiment_score: float | None, cap: float = SENTIMENT_IMPACT_CAP
+) -> float:
     """`sentiment_score` is VADER's compound score, -1 (bearish) to +1
     (bullish) (see ingest/sentiment.py::SentimentResult). None (no
-    reading available) leaves `base_mean_return` untouched.
+    reading available) leaves `base_mean_return` untouched. `cap` defaults
+    to SENTIMENT_IMPACT_CAP; model/tuning.py supplies per-company overrides.
     """
     if sentiment_score is None:
         return base_mean_return
-    shift = max(-1.0, min(1.0, sentiment_score)) * SENTIMENT_IMPACT_CAP
+    shift = max(-1.0, min(1.0, sentiment_score)) * cap
     return base_mean_return + shift

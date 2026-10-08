@@ -41,6 +41,7 @@ from stock_predictor.ingest.fundamentals import fetch_overview  # noqa: E402
 from stock_predictor.ingest.price_history import fetch_recent_bars  # noqa: E402
 from stock_predictor.ingest.sentiment import fetch_recent_articles, fetch_sentiment  # noqa: E402
 from stock_predictor.ingest.social_sentiment import fetch_recent_posts, fetch_social_sentiment  # noqa: E402
+from stock_predictor.model.tuning import TunableParams  # noqa: E402
 from stock_predictor.prediction.service import predict_symbol  # noqa: E402
 from stock_predictor.prediction.training import train_symbol  # noqa: E402
 from stock_predictor.storage.db import init_db, session_scope  # noqa: E402
@@ -257,6 +258,13 @@ def main() -> None:
                 continue
             log_recommendation(session, symbol_id, new_recommendation)
             previous_label = previous.recommendation if previous is not None else None
+            math_note = ""
+            if prediction.composite.overridden:
+                # A flip can come from the AI-tuned math rather than the
+                # market -- say so, and what the default math would say.
+                default_prediction = predict_symbol(session, symbol_id, TunableParams())
+                default_rec = default_prediction.composite.recommendation if default_prediction else "n/a"
+                math_note = f" | custom math in effect (default math: {default_rec})"
         print(f"  recommendation: {new_recommendation}")
         if previous_label is not None:
             if not is_watchlisted:
@@ -268,7 +276,7 @@ def main() -> None:
                 previous_close = float(closes.iloc[-2]) if len(closes) >= 2 else None
                 price_note = f" | {format_price_move(latest_close, previous_close)}" if latest_close else ""
                 alerted = send_webhook_alert(
-                    f"{ticker}: {previous_label} -> {new_recommendation}{price_note}"
+                    f"{ticker}: {previous_label} -> {new_recommendation}{price_note}{math_note}"
                 )
                 print(f"  alert: {'sent' if alerted else 'skipped (no webhook configured or send failed)'}")
 

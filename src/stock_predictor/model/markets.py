@@ -40,6 +40,9 @@ class PredictionBreakdown:
     xi: float  # time-decay rate used for the underlying fit
     n_bars: int  # daily returns used in the fit
     fitted_at: str  # ISO timestamp of that fit
+    # The sentiment-nudge cap actually applied (SENTIMENT_IMPACT_CAP unless
+    # overridden for this company -- see model/tuning.py).
+    impact_cap: float | None = None
 
 
 @dataclass

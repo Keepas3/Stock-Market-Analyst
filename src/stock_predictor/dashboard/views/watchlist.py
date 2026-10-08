@@ -11,7 +11,8 @@ import streamlit as st
 
 from stock_predictor.dashboard import navigation
 from stock_predictor.dashboard.auth import require_owner
-from stock_predictor.dashboard.components import render_symbol_table, watchlist_dataframe
+from stock_predictor.dashboard.components import watchlist_dataframe
+from stock_predictor.dashboard.symbol_browser import render_symbol_browser
 from stock_predictor.storage.db import session_scope
 from stock_predictor.storage.repository import (
     get_alert_threshold,
@@ -34,40 +35,30 @@ def render() -> None:
         )
         return
 
-    search_query = st.text_input("Search symbol", placeholder="e.g. AAPL")
-    if search_query:
-        filtered = df[
-            df["Ticker"].str.contains(search_query, case=False, na=False)
-            | df["Name"].str.contains(search_query, case=False, na=False)
-        ]
-    else:
-        filtered = df
-
-    if search_query and filtered.empty:
-        st.info(f'No symbol matches "{search_query}".')
-        return
-
-    selected = render_symbol_table(filtered, key="watchlist_table")
-
-    # Right below the table (not after the caption) -- with the table's
-    # own height now capped (see components.MAX_TABLE_HEIGHT), these are
-    # reachable with at most one short scroll after selecting a row.
-    if selected is not None:
+    def _actions(selected: dict | None) -> None:
+        if selected is None:
+            st.caption("Select a company (click a table row, bar or point) to remove it, open its full breakdown, or set a price alert.")
+            return
         symbol_id = int(selected["symbol_id"])
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("Remove from Watchlist", key=f"toggle_{symbol_id}"):
+        name_col, remove_col, view_col = st.columns([3, 2, 3], vertical_alignment="center")
+        name_col.markdown(f"**{selected['Ticker']}** · {selected['Name']}")
+        with remove_col:
+            if st.button("Remove from Watchlist", key=f"toggle_{symbol_id}", use_container_width=True):
 
-                def _do_remove(symbol_id=symbol_id) -> None:
+                def _do_remove() -> None:
                     with session_scope() as session:
                         set_watchlisted(session, symbol_id, False)
 
                 if require_owner(_do_remove):
                     st.rerun()
-        with col2:
-            if st.button(f"View {selected['Ticker']} full detail →", key=f"view_{symbol_id}"):
+        with view_col:
+            if st.button(f"View {selected['Ticker']} full detail →", key=f"view_{symbol_id}", use_container_width=True):
                 st.switch_page(navigation.symbol_detail_page(), query_params={"symbol": str(symbol_id)})
 
+    selected = render_symbol_browser(df, "watchlist", _actions, page_label="Watchlist")
+
+    if selected is not None:
+        symbol_id = int(selected["symbol_id"])
         st.subheader(f"Price alert -- {selected['Ticker']}")
         with session_scope() as session:
             existing_alert = get_alert_threshold(session, symbol_id)
@@ -107,8 +98,9 @@ def render() -> None:
                 st.success("Price alert saved.")
 
     st.caption(
-        "Click a row to reveal buttons for removing it from your Watchlist, viewing its full "
-        "breakdown, or setting a price alert (checked every ~15 minutes during market hours). "
+        "Switch between the Table and Chart views and filter by search, sector or recommendation. Select "
+        "a company and the bar above lets you remove it from your Watchlist or view its full breakdown; "
+        "the price-alert form appears below (alerts are checked every ~15 minutes during market hours). "
         "Removing/setting an alert may ask for a password; viewing is open to everyone. "
         "MA Signal/P/E/News Sentiment/Social Sentiment/Recommendation show as blank for a symbol "
         "until enough data has been collected for it."
