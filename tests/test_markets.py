@@ -105,3 +105,18 @@ def test_composite_defaults_to_none():
     # the field exists and is opt-in, not silently required.
     prediction = _prediction(p_up=0.6, p_down=0.1)
     assert prediction.composite is None
+
+
+def test_matches_scipy_stats_student_t_exactly():
+    """predict_markets uses scipy.special directly (cheaper to import than
+    scipy.stats); pin it to scipy.stats.t so the two can never drift apart."""
+    from scipy.stats import t as student_t
+
+    for dof in (3.0, 5.0, 12.0):
+        for mean in (-0.04, 0.0, 0.03):
+            for sigma in (0.01, 0.05):
+                prediction = predict_markets(horizon_mean=mean, horizon_sigma=sigma, dof=dof)
+                dist = student_t(df=dof, loc=mean, scale=_t_scale_for_target_std(sigma, dof))
+                assert prediction.p_down == float(dist.cdf(-FLAT_BAND))
+                assert prediction.p_up == float(1.0 - dist.cdf(FLAT_BAND))
+                assert prediction.return_range_80pct == (float(dist.ppf(0.1)), float(dist.ppf(0.9)))

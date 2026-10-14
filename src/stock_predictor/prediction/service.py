@@ -9,6 +9,7 @@ return model.
 
 from __future__ import annotations
 
+import pandas as pd
 from sqlalchemy.orm import Session
 
 from stock_predictor.model import overrides_store
@@ -30,7 +31,10 @@ HORIZON_DAYS = 5
 
 
 def predict_symbol(
-    session: Session, symbol_id: int, tuning: TunableParams | None = None
+    session: Session,
+    symbol_id: int,
+    tuning: TunableParams | None = None,
+    price_df: pd.DataFrame | None = None,
 ) -> StockPrediction | None:
     """None if this symbol has no trained return model yet (see
     prediction.training.train_symbol) -- same "nothing to show yet"
@@ -40,7 +44,8 @@ def predict_symbol(
     `tuning` is this company's effective math parameters (model/tuning.py).
     Omitted, it's resolved from config/model_overrides.yaml for this
     symbol's ticker; callers that loop over many symbols can resolve once
-    per render and pass it in.
+    per render and pass it in. `price_df` is this symbol's price history if the
+    caller already has it (only the last ~200 bars are used); omitted, it's loaded.
     """
     params = latest_return_model_params(session, symbol_id)
     if params is None:
@@ -72,7 +77,8 @@ def predict_symbol(
         impact_cap=tuning.sentiment_impact_cap,
     )
 
-    price_df = price_bars_for_symbol(session, symbol_id)
+    if price_df is None:
+        price_df = price_bars_for_symbol(session, symbol_id)
     sma_short, sma_long = compute_moving_averages(price_df)
     ma_vote = ma_signal(sma_short, sma_long)
 

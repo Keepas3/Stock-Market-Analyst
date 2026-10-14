@@ -11,22 +11,22 @@ import streamlit as st
 
 from stock_predictor.dashboard import navigation
 from stock_predictor.dashboard.auth import require_owner
-from stock_predictor.dashboard.components import watchlist_dataframe
+from stock_predictor.dashboard.components import symbols_frame
 from stock_predictor.dashboard.symbol_browser import render_symbol_browser
 from stock_predictor.storage.db import session_scope
 from stock_predictor.storage.repository import (
     get_alert_threshold,
     set_alert_threshold,
     set_watchlisted,
-    watchlisted_symbols,
 )
 
 
 def render() -> None:
     st.title("Watchlist")
 
-    with session_scope() as session:
-        df = watchlist_dataframe(session, watchlisted_symbols(session))
+    # The cached full table already carries each company's Watchlist flag.
+    df = symbols_frame()
+    df = df[df["Watchlist"]].reset_index(drop=True)
 
     if df.empty:
         st.info(

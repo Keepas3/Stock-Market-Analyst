@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from scipy.stats import t as student_t
+from scipy.special import stdtr, stdtrit
 
 from stock_predictor.model.technical_score import CompositeSignal
 
@@ -79,13 +79,22 @@ def _t_scale_for_target_std(target_std: float, dof: float) -> float:
 
 def predict_markets(horizon_mean: float, horizon_sigma: float, dof: float, flat_band: float = FLAT_BAND) -> StockPrediction:
     scale = _t_scale_for_target_std(horizon_sigma, dof)
-    dist = student_t(df=dof, loc=horizon_mean, scale=scale)
 
-    p_down = float(dist.cdf(-flat_band))
-    p_up = float(1.0 - dist.cdf(flat_band))
+    # Student-t(df=dof, loc=horizon_mean, scale=scale) via scipy.special's
+    # standardized CDF/inverse CDF -- the exact routines scipy.stats.t calls
+    # underneath (bit-for-bit the same results), without importing scipy.stats,
+    # which alone added ~1s to every cold start of the app.
+    def cdf(x: float) -> float:
+        return float(stdtr(dof, (x - horizon_mean) / scale))
+
+    def ppf(q: float) -> float:
+        return float(horizon_mean + scale * stdtrit(dof, q))
+
+    p_down = cdf(-flat_band)
+    p_up = 1.0 - cdf(flat_band)
     p_flat = max(0.0, 1.0 - p_down - p_up)
 
-    lo, hi = float(dist.ppf(0.1)), float(dist.ppf(0.9))
+    lo, hi = ppf(0.1), ppf(0.9)
 
     return StockPrediction(
         p_up=p_up,

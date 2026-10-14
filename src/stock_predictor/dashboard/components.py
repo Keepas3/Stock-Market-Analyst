@@ -11,6 +11,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from sqlalchemy.orm import Session
 
+from stock_predictor import config
 from stock_predictor.model import overrides_store
 from stock_predictor.model.sentiment_adjustment import SENTIMENT_IMPACT_CAP
 from stock_predictor.model.technical_indicators import PE_EXPENSIVE_THRESHOLD, PE_VALUE_THRESHOLD
@@ -23,6 +24,7 @@ from stock_predictor.model.technical_score import (
 )
 from stock_predictor.model.tuning import resolve_params
 from stock_predictor.prediction.service import predict_symbol
+from stock_predictor.storage.db import session_scope
 from stock_predictor.storage.models import Symbol
 from stock_predictor.storage.repository import (
     all_symbols,
@@ -30,6 +32,7 @@ from stock_predictor.storage.repository import (
     latest_sentiment,
     latest_social_sentiment,
     price_bars_for_symbol,
+    recent_price_bars_by_symbol,
 )
 
 WATCHLIST_DISPLAY_COLUMNS = (
@@ -189,13 +192,18 @@ def watchlist_dataframe(session: Session, symbols: list[Symbol] | None = None) -
     rows = []
     # One YAML read per render (cached by mtime), not one per symbol.
     all_overrides = overrides_store.all_overrides()
+    # Recent bars for every company in ONE query, shared by the snapshot and the
+    # prediction below (previously each company loaded its full history twice).
+    bars = recent_price_bars_by_symbol(session)
+    no_bars = pd.DataFrame(columns=["date", "open", "high", "low", "close", "volume"])
     for symbol in symbols if symbols is not None else all_symbols(session):
-        prediction = predict_symbol(session, symbol.id, resolve_params(all_overrides.get(symbol.ticker)))
+        price_df = bars.get(symbol.id, no_bars)
+        prediction = predict_symbol(session, symbol.id, resolve_params(all_overrides.get(symbol.ticker)), price_df)
         composite = prediction.composite if prediction else None
         fundamentals = latest_fundamentals(session, symbol.id)
         sentiment_row = latest_sentiment(session, symbol.id)
         social = latest_social_sentiment(session, symbol.id)
-        snapshot = market_snapshot(price_bars_for_symbol(session, symbol.id))
+        snapshot = market_snapshot(price_df)
         rows.append(
             {
                 "symbol_id": symbol.id,
@@ -222,6 +230,41 @@ def watchlist_dataframe(session: Session, symbols: list[Symbol] | None = None) -
 # text are formatted from the model constants so it can't drift from what the
 # math actually does by default (per-company tuning can override them).
 INFO_MARK = " ⓘ"
+
+_SYMBOLS_FRAME_TTL_SECONDS = 900
+
+
+def _data_version() -> tuple:
+    """Changes whenever anything the table is built from changes: the database
+    (the cron's data commits, and the app's own watchlist/alert writes) or the
+    per-company math overrides. Used as the cache key, so the table is rebuilt
+    exactly when its inputs are."""
+    parts = []
+    for path in (config.DB_PATH, overrides_store.overrides_path()):
+        try:
+            stat = path.stat()
+            parts.append((str(path), stat.st_mtime_ns, stat.st_size))
+        except OSError:
+            parts.append((str(path), None, None))
+    return tuple(parts)
+
+
+@st.cache_data(ttl=_SYMBOLS_FRAME_TTL_SECONDS, show_spinner=False)
+def _cached_symbols_frame(version: tuple) -> pd.DataFrame:
+    # `version` is only the cache key. Opens its own session: cache_data must not
+    # capture the caller's.
+    with session_scope() as session:
+        return watchlist_dataframe(session)
+
+
+def symbols_frame() -> pd.DataFrame:
+    """The full Companies table data, cached across reruns AND sessions. Every
+    widget click on the Companies/Watchlist pages re-executes the whole script,
+    which used to rebuild this from ~460 queries each time (~2s); now it's built
+    once per data change (shared by all visitors) and each rerun is a lookup.
+    A fresh copy each call, so callers can filter or sort it freely."""
+    return _cached_symbols_frame(_data_version()).copy()
+
 
 _SYMBOL_TABLE_COLUMN_CONFIG = {
     "Price": st.column_config.NumberColumn(format="dollar"),

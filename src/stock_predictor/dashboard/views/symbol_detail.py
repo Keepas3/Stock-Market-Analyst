@@ -264,7 +264,7 @@ def render() -> None:
 
     st.subheader("Recommendation")
     with session_scope() as session:
-        prediction = predict_symbol(session, symbol_id, tuning)
+        prediction = predict_symbol(session, symbol_id, tuning, price_df)  # bars already loaded above
     if prediction is None or prediction.composite is None:
         st.warning("No prediction available for this symbol yet.")
     else:

@@ -11,7 +11,7 @@ import streamlit as st
 
 from stock_predictor.dashboard import navigation
 from stock_predictor.dashboard.auth import require_owner
-from stock_predictor.dashboard.components import watchlist_dataframe
+from stock_predictor.dashboard.components import symbols_frame
 from stock_predictor.dashboard.symbol_browser import render_symbol_browser
 from stock_predictor.storage.db import session_scope
 from stock_predictor.storage.repository import set_watchlisted
@@ -20,8 +20,7 @@ from stock_predictor.storage.repository import set_watchlisted
 def render() -> None:
     st.title("Companies")
 
-    with session_scope() as session:
-        df = watchlist_dataframe(session)
+    df = symbols_frame()
 
     if df.empty:
         st.warning("No symbols loaded yet. Please check back soon.")

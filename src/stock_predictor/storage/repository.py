@@ -9,7 +9,7 @@ from __future__ import annotations
 import datetime as dt
 
 import pandas as pd
-from sqlalchemy import delete, func, select
+from sqlalchemy import and_, delete, func, select
 from sqlalchemy.orm import Session
 
 from stock_predictor.storage.models import (
@@ -183,6 +183,44 @@ def price_bars_for_symbol(session: Session, symbol_id: int) -> pd.DataFrame:
         .order_by(PriceBar.date.asc())
     ).all()
     return pd.DataFrame(rows, columns=["date", "open", "high", "low", "close", "volume"])
+
+
+# Bars the Companies/Watchlist tables actually need per company: the 200-bar
+# long moving average, and the trailing-365-day 52-week range (at most ~366
+# daily bars). 400 comfortably covers both, so the table gives exactly the
+# numbers it would from the full 10-year history while loading ~6x less.
+RECENT_BARS = 400
+# Calendar-day lookback that always contains at least RECENT_BARS daily bars
+# (~480 trading days fit in 700), used to bound the query by an indexed date
+# range -- a ROW_NUMBER() window over the whole table was ~4x slower because
+# SQLite had to sort every row.
+_LOOKBACK_DAYS = 700
+_BAR_COLUMNS = ["date", "open", "high", "low", "close", "volume"]
+
+
+def recent_price_bars_by_symbol(session: Session, limit: int = RECENT_BARS) -> dict[int, pd.DataFrame]:
+    """The most recent `limit` daily bars for EVERY symbol in one query,
+    oldest-first within each (same shape as price_bars_for_symbol) -- instead
+    of one full-history query per symbol. Symbols with no bars are absent.
+    SQLite-specific (its date() function), like the rest of this storage layer.
+    """
+    cutoffs = (
+        select(PriceBar.symbol_id, func.date(func.max(PriceBar.date), f"-{_LOOKBACK_DAYS} days").label("cutoff"))
+        .group_by(PriceBar.symbol_id)
+        .cte("cutoffs")
+    )
+    rows = session.execute(
+        select(
+            PriceBar.symbol_id, PriceBar.date, PriceBar.open, PriceBar.high, PriceBar.low, PriceBar.close, PriceBar.volume
+        )
+        .join(cutoffs, and_(PriceBar.symbol_id == cutoffs.c.symbol_id, PriceBar.date >= cutoffs.c.cutoff))
+        .order_by(PriceBar.symbol_id, PriceBar.date)
+    ).all()
+    frame = pd.DataFrame(rows, columns=["symbol_id", *_BAR_COLUMNS])
+    return {
+        int(symbol_id): group[_BAR_COLUMNS].tail(limit).reset_index(drop=True)
+        for symbol_id, group in frame.groupby("symbol_id")
+    }
 
 
 def latest_price_bar(session: Session, symbol_id: int) -> PriceBar | None:
